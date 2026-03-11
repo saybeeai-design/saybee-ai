@@ -1,0 +1,70 @@
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import prisma from './db';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'stub_client_id';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'stub_client_secret';
+
+// In production, callbackURL should be an absolute URL like https://api.saybeeai.com/api/auth/google/callback
+const callbackURL = process.env.NODE_ENV === 'production' 
+  ? `${process.env.BACKEND_URL}/api/auth/google/callback`
+  : '/api/auth/google/callback';
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+      callbackURL: callbackURL,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        const email = profile.emails?.[0].value;
+        if (!email) {
+          return done(new Error('No email found from Google profile'), false as any);
+        }
+
+        let user = await prisma.user.findUnique({
+          where: { googleId: profile.id },
+        });
+
+        if (user) {
+          return done(null, user);
+        }
+
+        user = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (user) {
+          user = await prisma.user.update({
+            where: { email },
+            data: {
+              googleId: profile.id,
+              provider: 'GOOGLE',
+            },
+          });
+          return done(null, user);
+        }
+
+        user = await prisma.user.create({
+          data: {
+            email,
+            name: profile.displayName || email.split('@')[0],
+            googleId: profile.id,
+            provider: 'GOOGLE',
+          },
+        });
+
+        return done(null, user);
+      } catch (error) {
+        return done(error as Error, false as any);
+      }
+    }
+  )
+);
+
+export default passport;

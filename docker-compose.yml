@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  saybeeai-db:
+    image: postgres:15-alpine
+    container_name: saybeeai-db
+    restart: always
+    environment:
+      POSTGRES_USER: saybeeai
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: saybeeai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - saybeeai-pgdata:/var/lib/postgresql/data
+
+volumes:
+  saybeeai-pgdata:

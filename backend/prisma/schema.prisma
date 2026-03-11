@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String?
+  name             String?
+  role             String         @default("USER")
+  credits          Int            @default(2)
+  isPaid           Boolean        @default(false)
+  stripeCustomerId String?
+  
+  // Google OAuth support
+  googleId         String?        @unique
+  provider         String         @default("LOCAL")
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  resumes          Resume[]
+  interviews       Interview[]
+  subscriptions    Subscription[]
+
+  @@index([email])
+}
+
+model Resume {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String
+  parsedData  String?
+  createdAt   DateTime    @default(now())
+  interviews  Interview[]
+}
+
+model Interview {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId    String
+  resume      Resume      @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  category    String
+  language    String      @default("English")
+  status      String          @default("PENDING")
+  score       Float?
+  reportData  Json?
+  createdAt   DateTime    @default(now())
+  questions   Question[]
+  transcript  Transcript?
+
+  @@index([userId])
+}
+
+model Question {
+  id          String     @id @default(uuid())
+  interviewId String
+  interview   Interview  @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  content     String
+  order       Int
+  createdAt   DateTime   @default(now())
+  answer      Answer?
+}
+
+model Answer {
+  id          String     @id @default(uuid())
+  questionId  String     @unique
+  question    Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content     String
+  evaluation  String?
+  score       Float?
+  createdAt   DateTime   @default(now())
+}
+
+model Transcript {
+  id          String     @id @default(uuid())
+  interviewId String     @unique
+  interview   Interview  @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  text        String
+  createdAt   DateTime   @default(now())
+}
+
+model Subscription {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      String       @default("FREE")
+  status    String       @default("ACTIVE")
+  startDate DateTime     @default(now())
+  endDate   DateTime?
+  stripeSubscriptionId String?
+}
+
+model Coupon {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  discountType   String    // 'PERCENTAGE' or 'FIXED'
+  discountValue  Float
+  expiryDate     DateTime
+  maxUses        Int
+  currentUses    Int       @default(0)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+}
+
+model UsageLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  action      String   // e.g., 'INTERVIEW_STARTED', 'RESUME_UPLOADED'
+  details     String?  // Optional JSON string for extra metadata
+  createdAt   DateTime @default(now())
+}
