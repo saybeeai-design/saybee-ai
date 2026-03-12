@@ -16,7 +16,7 @@ const api = axios.create({
 // Attach JWT token from localStorage to every request
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('saybeeai_token');
+    const token = localStorage.getItem('token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -28,7 +28,7 @@ api.interceptors.response.use(
   (err) => {
     Sentry.captureException(err);
     if (err.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('saybeeai_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('saybeeai_user');
       window.location.href = '/login';
     }

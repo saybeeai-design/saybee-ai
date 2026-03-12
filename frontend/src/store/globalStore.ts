@@ -27,14 +27,14 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (token, user) => {
         if (typeof window !== 'undefined') {
-          localStorage.setItem('saybeeai_token', token);
+          localStorage.setItem('token', token);
         }
         set({ token, user, isAuthenticated: true });
       },
 
       logout: () => {
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('saybeeai_token');
+          localStorage.removeItem('token');
         }
         set({ token: null, user: null, isAuthenticated: false });
         window.location.href = '/login';

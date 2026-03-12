@@ -21,22 +21,17 @@ function AuthCallbackContent() {
     }
 
     if (token) {
-      localStorage.setItem('saybeeai_token', token);
-      
+      localStorage.setItem('token', token);
+
       userAPI.getProfile().then((res) => {
-         setAuth(token, res.data.user); // wait, response might be nested differently. Let's assume res.data is the user? Wait, let's check userController.ts
-         // Looking at userController getProfile, it returns res.status(200).json(user) 
-         // So res.data is the user object!
-         // Wait, auth endpoint signup/login return { message, token, user }. getProfile returns `{ id, email, ... }`
-         // Let's pass res.data because setAuth expects the user object.
-         setAuth(token, res.data);
-         toast.success('Successfully logged in with Google!');
-         router.push('/dashboard');
+        setAuth(token, res.data.user);
+        toast.success('Successfully logged in with Google!');
+        router.push('/dashboard');
       }).catch((err) => {
-         console.error('Failed to resolve Google user', err);
-         toast.error('Failed to complete Google login');
-         localStorage.removeItem('saybeeai_token');
-         router.push('/login');
+        console.error('Failed to resolve Google user', err);
+        toast.error('Failed to complete Google login');
+        localStorage.removeItem('token');
+        router.push('/login');
       });
     } else {
       router.push('/login');
