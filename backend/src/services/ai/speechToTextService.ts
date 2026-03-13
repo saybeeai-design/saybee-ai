@@ -12,16 +12,16 @@ export interface TranscriptionResult {
  * Transcribes an audio file using the OpenAI Whisper API.
  * The audio file should be in a supported format: mp3, mp4, mpeg, mpga, m4a, wav, or webm.
  *
- * Falls back to a stub response if WHISPER_API_KEY is not configured.
+ * Falls back to a stub response if OPENAI_API_KEY is not configured.
  */
 export async function transcribeAudio(audioFilePath: string): Promise<TranscriptionResult> {
-  const apiKey = process.env.WHISPER_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
 
   // ── Stub mode (no API key configured) ────────────────────────────────────────
   if (!apiKey) {
-    console.warn('[SpeechToText] No WHISPER_API_KEY found — returning stub transcription');
+    console.warn('[SpeechToText] No OPENAI_API_KEY found — returning stub transcription');
     return {
-      text: '[Speech-to-Text stub: configure WHISPER_API_KEY to enable real transcription]',
+      text: '[Speech-to-Text stub: configure OPENAI_API_KEY to enable real transcription]',
       language: 'en',
     };
   }

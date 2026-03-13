@@ -1,4 +1,6 @@
 import { Router, RequestHandler } from 'express';
+import { upload } from '../middlewares/uploadMiddleware';
+import { transcribeAudio } from '../services/whisperService';
 import {
   startInterview,
   getInterview,
@@ -26,5 +28,28 @@ router.get('/:id/questions', getInterviewQuestions as unknown as RequestHandler)
 // ── AI-powered endpoints ─────────────────────────────────────────────────────
 router.post('/:id/generate-question', generateAIQuestion as unknown as RequestHandler); // POST /api/interviews/:id/generate-question (Gemini)
 router.post('/:id/next-turn', nextInterviewTurn as unknown as RequestHandler);          // POST /api/interviews/:id/next-turn (full loop)
+
+// ── Speech-to-Text ───────────────────────────────────────────────────────────
+router.post('/speech-to-text', upload.single('audio'), (async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No audio file provided' });
+    }
+
+    const filePath = req.file.path;
+    const transcript = await transcribeAudio(filePath);
+
+    res.json({
+      success: true,
+      transcript: transcript
+    });
+  } catch (error) {
+    console.error("Whisper transcription error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to transcribe audio"
+    });
+  }
+}) as RequestHandler);
 
 export default router;

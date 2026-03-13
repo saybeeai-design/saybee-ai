@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { sendInterviewReport } from '../services/emailService';
 import { generateFinalReport } from '../services/ai/evaluationService';
+import { generateInterviewQuestion } from '../services/ai/geminiService';
 
 // Interview stages in order
 export const INTERVIEW_STAGES = [
@@ -72,12 +73,25 @@ export const startInterview = async (
       data: { credits: { decrement: 1 } },
     });
 
+    // Generate the first question immediately
+    const resumeContext = (resume.parsedData as any)?.summary || `Candidate applying for ${category}`;
+    const firstQuestionContent = await generateInterviewQuestion(resumeContext);
+
+    const firstQuestion = await prisma.question.create({
+      data: {
+        interviewId: interview.id,
+        content: firstQuestionContent,
+        order: 1,
+      },
+    });
+
     res.status(201).json({
       message: 'Interview session started',
       interview: {
         ...interview,
         currentStage: INTERVIEW_STAGES[0],
         totalStages: INTERVIEW_STAGES.length,
+        firstQuestion,
       },
     });
   } catch (error) {

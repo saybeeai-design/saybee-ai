@@ -1,8 +1,7 @@
 import { Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
-import { generateInterviewQuestion } from '../services/ai/questionService';
-import { evaluateAnswer } from '../services/ai/evaluationService';
+import { generateInterviewQuestion, evaluateAnswer } from '../services/ai/geminiService';
 import { transcribeBuffer } from '../services/ai/speechToTextService';
 import { textToSpeech, getLanguageCode } from '../services/ai/textToSpeechService';
 import { INTERVIEW_STAGES } from './interviewController';
@@ -98,17 +97,11 @@ export const generateAIQuestion = async (
       (interview.resume.parsedData as Record<string, string> | null)?.summary ??
       `File: ${interview.resume.fileName}`;
 
-    // 1. Generate question via Gemini with Fallback
+    // 1. Generate question via Gemini
     let generatedContent = '';
     try {
-      const generated = await generateInterviewQuestion({
-        stage,
-        category: interview.category,
-        language: interview.language,
-        resumeSummary,
-        previousQuestions,
-      });
-      generatedContent = generated.content;
+      const context = `Stage: ${stage}, Category: ${interview.category}, Language: ${interview.language}, Resume: ${resumeSummary}`;
+      generatedContent = await generateInterviewQuestion(context);
     } catch (err: any) {
       console.warn('Gemini AI failed to generate question, using fallback:', err.message);
       const stageQuestions = PLACEHOLDER_QUESTIONS[stage] || PLACEHOLDER_QUESTIONS.Introduction;
@@ -192,34 +185,28 @@ export const evaluateQuestionAnswer = async (
     );
     const stage = INTERVIEW_STAGES[stageIndex];
 
-    // Run Gemini evaluation with Fallback
-    let evaluation;
+    // Run Gemini evaluation
+    let feedback;
     try {
-      evaluation = await evaluateAnswer({
-        question: question.content,
-        answer: question.answer.content,
-        stage,
-        category: question.interview.category,
-        language: question.interview.language,
-      });
+      feedback = await evaluateAnswer(question.content, question.answer.content);
     } catch (err: any) {
       console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-      evaluation = { score: 5, communication: 5, confidence: 5, feedback: "AI evaluation unavailable right now." };
+      feedback = "AI evaluation unavailable right now.";
     }
 
     // Update the answer with AI evaluation
     const updatedAnswer = await prisma.answer.update({
       where: { id: question.answer.id },
       data: {
-        score: evaluation.score,
-        evaluation: JSON.stringify(evaluation),
+        score: parseInt(feedback.match(/Score:?\s*(\d+)/i)?.[1] || '5'),
+        evaluation: feedback,
       },
     });
 
     res.status(200).json({
       message: 'Answer evaluated successfully',
       answer: updatedAnswer,
-      evaluation,
+      evaluation: feedback,
     });
   } catch (error) {
     next(error);
@@ -340,23 +327,22 @@ export const nextInterviewTurn = async (
     const stage = INTERVIEW_STAGES[stageIndex];
 
     let evaluation;
+    // 2. Evaluate answer using Gemini
+    let feedback;
     try {
-      evaluation = await evaluateAnswer({
-        question: question.content,
-        answer: answerContent,
-        stage,
-        category: question.interview.category,
-        language: question.interview.language,
-      });
+      feedback = await evaluateAnswer(question.content, answerContent);
     } catch (err: any) {
       console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-      evaluation = { score: 5, communication: 5, confidence: 5, feedback: "AI evaluation unavailable right now." };
+      feedback = "AI evaluation unavailable right now.";
     }
 
     // Persist evaluation
     const evaluatedAnswer = await prisma.answer.update({
       where: { id: savedAnswer.id },
-      data: { score: evaluation.score, evaluation: JSON.stringify(evaluation) },
+      data: { 
+        score: parseInt(feedback.match(/Score:?\s*(\d+)/i)?.[1] || '5'), 
+        evaluation: feedback 
+      },
     });
 
     // ── 3. Stitch live transcript ──────────────────────────────────────────────
@@ -396,14 +382,8 @@ export const nextInterviewTurn = async (
 
       let generatedContent = '';
       try {
-        const generated = await generateInterviewQuestion({
-          stage: nextStage,
-          category: currentInterview!.category,
-          language: currentInterview!.language,
-          resumeSummary,
-          previousQuestions,
-        });
-        generatedContent = generated.content;
+        const context = `Stage: ${nextStage}, Category: ${currentInterview!.category}, Language: ${currentInterview!.language}, Resume: ${resumeSummary}`;
+        generatedContent = await generateInterviewQuestion(context);
       } catch (err: any) {
         console.warn('Gemini AI failed to generate question, using fallback:', err.message);
         const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
@@ -436,7 +416,7 @@ export const nextInterviewTurn = async (
         content: question.content,
         stage,
       },
-      evaluation,
+      evaluation: feedback,
       evaluatedAnswer,
       nextQuestion,
       tts,
