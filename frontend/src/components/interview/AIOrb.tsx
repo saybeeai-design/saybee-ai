@@ -13,7 +13,7 @@ const AIOrb = ({ state }: AIOrbProps) => {
       transition: {
         duration: 3,
         repeat: Infinity,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
       },
     },
     speaking: {
@@ -22,7 +22,7 @@ const AIOrb = ({ state }: AIOrbProps) => {
       transition: {
         duration: 0.8,
         repeat: Infinity,
-        ease: "easeInOut",
+        ease: "easeInOut" as const,
       },
     },
     thinking: {
@@ -32,12 +32,12 @@ const AIOrb = ({ state }: AIOrbProps) => {
         rotate: {
           duration: 2,
           repeat: Infinity,
-          ease: "linear",
+          ease: "linear" as const,
         },
         scale: {
           duration: 1.5,
           repeat: Infinity,
-          ease: "easeInOut",
+          ease: "easeInOut" as const,
         },
       },
     },

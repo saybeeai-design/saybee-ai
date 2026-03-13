@@ -20,9 +20,7 @@ dotenv_1.default.config();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'stub_client_id';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'stub_client_secret';
 // In production, callbackURL should be an absolute URL like https://api.saybeeai.com/api/auth/google/callback
-const callbackURL = process.env.NODE_ENV === 'production'
-    ? `${process.env.BACKEND_URL}/api/auth/google/callback`
-    : '/api/auth/google/callback';
+const callbackURL = process.env.GOOGLE_CALLBACK_URL || '/api/auth/google/callback';
 passport_1.default.use(new passport_google_oauth20_1.Strategy({
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,

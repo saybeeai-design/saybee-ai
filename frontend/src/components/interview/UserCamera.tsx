@@ -1,4 +1,4 @@
-"use strict";
+"use client";
 import { useEffect, useRef, useState } from "react";
 import { Camera, CameraOff } from "lucide-react";
 

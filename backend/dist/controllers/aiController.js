@@ -14,8 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.nextInterviewTurn = exports.speakText = exports.transcribeAudioFile = exports.evaluateQuestionAnswer = exports.generateAIQuestion = void 0;
 const db_1 = __importDefault(require("../config/db"));
-const questionService_1 = require("../services/ai/questionService");
-const evaluationService_1 = require("../services/ai/evaluationService");
+const geminiService_1 = require("../services/ai/geminiService");
 const speechToTextService_1 = require("../services/ai/speechToTextService");
 const textToSpeechService_1 = require("../services/ai/textToSpeechService");
 const interviewController_1 = require("./interviewController");
@@ -92,17 +91,11 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
         const previousQuestions = interview.questions.map((q) => q.content);
         // Build resume summary for the prompt
         const resumeSummary = (_c = (_b = interview.resume.parsedData) === null || _b === void 0 ? void 0 : _b.summary) !== null && _c !== void 0 ? _c : `File: ${interview.resume.fileName}`;
-        // 1. Generate question via Gemini with Fallback
+        // 1. Generate question via Gemini
         let generatedContent = '';
         try {
-            const generated = yield (0, questionService_1.generateInterviewQuestion)({
-                stage,
-                category: interview.category,
-                language: interview.language,
-                resumeSummary,
-                previousQuestions,
-            });
-            generatedContent = generated.content;
+            const context = `Stage: ${stage}, Category: ${interview.category}, Language: ${interview.language}, Resume: ${resumeSummary}`;
+            generatedContent = yield (0, geminiService_1.generateInterviewQuestion)(context);
         }
         catch (err) {
             console.warn('Gemini AI failed to generate question, using fallback:', err.message);
@@ -147,7 +140,7 @@ exports.generateAIQuestion = generateAIQuestion;
 // Evaluate an already-submitted answer using Gemini AI.
 // Can also be called immediately after submit if evaluate=true in the answer body.
 const evaluateQuestionAnswer = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const questionId = req.params.id;
@@ -174,33 +167,27 @@ const evaluateQuestionAnswer = (req, res, next) => __awaiter(void 0, void 0, voi
         }
         const stageIndex = Math.min(Math.floor((question.order - 1) / QUESTIONS_PER_STAGE), interviewController_1.INTERVIEW_STAGES.length - 1);
         const stage = interviewController_1.INTERVIEW_STAGES[stageIndex];
-        // Run Gemini evaluation with Fallback
-        let evaluation;
+        // Run Gemini evaluation
+        let feedback;
         try {
-            evaluation = yield (0, evaluationService_1.evaluateAnswer)({
-                question: question.content,
-                answer: question.answer.content,
-                stage,
-                category: question.interview.category,
-                language: question.interview.language,
-            });
+            feedback = yield (0, geminiService_1.evaluateAnswer)(question.content, question.answer.content);
         }
         catch (err) {
             console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-            evaluation = { score: 5, communication: 5, confidence: 5, feedback: "AI evaluation unavailable right now." };
+            feedback = "AI evaluation unavailable right now.";
         }
         // Update the answer with AI evaluation
         const updatedAnswer = yield db_1.default.answer.update({
             where: { id: question.answer.id },
             data: {
-                score: evaluation.score,
-                evaluation: JSON.stringify(evaluation),
+                score: parseInt(((_b = feedback.match(/Score:?\s*(\d+)/i)) === null || _b === void 0 ? void 0 : _b[1]) || '5'),
+                evaluation: feedback,
             },
         });
         res.status(200).json({
             message: 'Answer evaluated successfully',
             answer: updatedAnswer,
-            evaluation,
+            evaluation: feedback,
         });
     }
     catch (error) {
@@ -257,7 +244,7 @@ exports.speakText = speakText;
 //   4. Convert it to speech
 //   Returns everything in one response for optimized frontend usage.
 const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const interviewId = req.params.id;
@@ -296,23 +283,22 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         const stageIndex = Math.min(Math.floor((question.order - 1) / QUESTIONS_PER_STAGE), interviewController_1.INTERVIEW_STAGES.length - 1);
         const stage = interviewController_1.INTERVIEW_STAGES[stageIndex];
         let evaluation;
+        // 2. Evaluate answer using Gemini
+        let feedback;
         try {
-            evaluation = yield (0, evaluationService_1.evaluateAnswer)({
-                question: question.content,
-                answer: answerContent,
-                stage,
-                category: question.interview.category,
-                language: question.interview.language,
-            });
+            feedback = yield (0, geminiService_1.evaluateAnswer)(question.content, answerContent);
         }
         catch (err) {
             console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-            evaluation = { score: 5, communication: 5, confidence: 5, feedback: "AI evaluation unavailable right now." };
+            feedback = "AI evaluation unavailable right now.";
         }
         // Persist evaluation
         const evaluatedAnswer = yield db_1.default.answer.update({
             where: { id: savedAnswer.id },
-            data: { score: evaluation.score, evaluation: JSON.stringify(evaluation) },
+            data: {
+                score: parseInt(((_b = feedback.match(/Score:?\s*(\d+)/i)) === null || _b === void 0 ? void 0 : _b[1]) || '5'),
+                evaluation: feedback
+            },
         });
         // ── 3. Stitch live transcript ──────────────────────────────────────────────
         const transcriptChunk = `Q: ${question.content}\nA: ${answerContent}`;
@@ -342,17 +328,11 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         if (totalAsked < maxQuestions) {
             const { stage: nextStage, stageIndex: nextStageIndex } = getCurrentStage(totalAsked);
             const previousQuestions = currentInterview.questions.map((q) => q.content);
-            const resumeSummary = (_c = (_b = currentInterview.resume.parsedData) === null || _b === void 0 ? void 0 : _b.summary) !== null && _c !== void 0 ? _c : `File: ${currentInterview.resume.fileName}`;
+            const resumeSummary = (_d = (_c = currentInterview.resume.parsedData) === null || _c === void 0 ? void 0 : _c.summary) !== null && _d !== void 0 ? _d : `File: ${currentInterview.resume.fileName}`;
             let generatedContent = '';
             try {
-                const generated = yield (0, questionService_1.generateInterviewQuestion)({
-                    stage: nextStage,
-                    category: currentInterview.category,
-                    language: currentInterview.language,
-                    resumeSummary,
-                    previousQuestions,
-                });
-                generatedContent = generated.content;
+                const context = `Stage: ${nextStage}, Category: ${currentInterview.category}, Language: ${currentInterview.language}, Resume: ${resumeSummary}`;
+                generatedContent = yield (0, geminiService_1.generateInterviewQuestion)(context);
             }
             catch (err) {
                 console.warn('Gemini AI failed to generate question, using fallback:', err.message);
@@ -384,7 +364,7 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
                 content: question.content,
                 stage,
             },
-            evaluation,
+            evaluation: feedback,
             evaluatedAnswer,
             nextQuestion,
             tts,

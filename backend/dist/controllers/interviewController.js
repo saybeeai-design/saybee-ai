@@ -16,6 +16,7 @@ exports.finishInterview = exports.listInterviews = exports.getInterview = export
 const db_1 = __importDefault(require("../config/db"));
 const emailService_1 = require("../services/emailService");
 const evaluationService_1 = require("../services/ai/evaluationService");
+const geminiService_1 = require("../services/ai/geminiService");
 // Interview stages in order
 exports.INTERVIEW_STAGES = [
     'Introduction',
@@ -26,7 +27,7 @@ exports.INTERVIEW_STAGES = [
 ];
 // ─── POST /api/interviews/start ───────────────────────────────────────────────
 const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         if (!userId) {
@@ -71,9 +72,19 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
             where: { id: userId },
             data: { credits: { decrement: 1 } },
         });
+        // Generate the first question immediately
+        const resumeContext = ((_b = resume.parsedData) === null || _b === void 0 ? void 0 : _b.summary) || `Candidate applying for ${category}`;
+        const firstQuestionContent = yield (0, geminiService_1.generateInterviewQuestion)(resumeContext);
+        const firstQuestion = yield db_1.default.question.create({
+            data: {
+                interviewId: interview.id,
+                content: firstQuestionContent,
+                order: 1,
+            },
+        });
         res.status(201).json({
             message: 'Interview session started',
-            interview: Object.assign(Object.assign({}, interview), { currentStage: exports.INTERVIEW_STAGES[0], totalStages: exports.INTERVIEW_STAGES.length }),
+            interview: Object.assign(Object.assign({}, interview), { currentStage: exports.INTERVIEW_STAGES[0], totalStages: exports.INTERVIEW_STAGES.length, firstQuestion }),
         });
     }
     catch (error) {
