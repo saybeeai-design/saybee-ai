@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { userAPI } from '@/lib/api';
@@ -7,7 +8,7 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
-export default function BillingSuccessPage() {
+function BillingSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
@@ -22,21 +23,21 @@ export default function BillingSuccessPage() {
 
     const verifyAndRedirect = async () => {
       try {
-        // Because webhook updates credits asynchronously on the backend, 
+        // Because webhook updates credits asynchronously on the backend,
         // give it a tiny delay to ensure webhook completes before pulling fresh profile.
         await new Promise(r => setTimeout(r, 1500));
-        
+
         const res = await userAPI.getProfile();
         updateUser(res.data.user);
-        
+
         toast.success('Payment successful! Credits added.', { duration: 4000 });
-        
+
         // Bounce user to dashboard
         setTimeout(() => {
           router.push('/dashboard');
         }, 1500);
       } catch (err) {
-        console.error("Verification failed:", err);
+        console.error('Verification failed:', err);
         router.push('/dashboard');
       } finally {
         setVerifying(false);
@@ -57,14 +58,14 @@ export default function BillingSuccessPage() {
           <>
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
             <h1 className="text-xl font-bold text-white mb-2">Verifying Payment</h1>
-            <p className="text-sm text-slate-400">Please don't close this window...</p>
+            <p className="text-sm text-slate-400">Please don&apos;t close this window...</p>
           </>
         ) : (
           <>
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              transition={{ type: "spring" }}
+              transition={{ type: 'spring' }}
             >
               <CheckCircle className="w-16 h-16 text-emerald-500 mb-4 mx-auto" />
             </motion.div>
@@ -74,5 +75,19 @@ export default function BillingSuccessPage() {
         )}
       </motion.div>
     </div>
+  );
+}
+
+export default function BillingSuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+        </div>
+      }
+    >
+      <BillingSuccessContent />
+    </Suspense>
   );
 }
