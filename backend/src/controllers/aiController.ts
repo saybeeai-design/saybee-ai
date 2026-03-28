@@ -1,10 +1,13 @@
 import { Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
-import { generateInterviewQuestion, evaluateAnswer } from '../services/ai/geminiService';
+import { evaluateAnswer, generateInterviewQuestion as legacyGenerate } from '../services/ai/geminiService';
+import { generateInterviewQuestion, generateFollowUpQuestion } from '../services/ai/questionService';
 import { transcribeBuffer } from '../services/ai/speechToTextService';
 import { textToSpeech, getLanguageCode } from '../services/ai/textToSpeechService';
 import { INTERVIEW_STAGES } from './interviewController';
+
+const MAX_FOLLOW_UPS = 2; // Maximum follow-ups per main question before advancing
 
 const QUESTIONS_PER_STAGE = 2;
 
@@ -100,8 +103,14 @@ export const generateAIQuestion = async (
     // 1. Generate question via Gemini
     let generatedContent = '';
     try {
-      const context = `Stage: ${stage}, Category: ${interview.category}, Language: ${interview.language}, Resume: ${resumeSummary}`;
-      generatedContent = await generateInterviewQuestion(context);
+      const generated = await generateInterviewQuestion({
+        stage,
+        category: interview.category,
+        language: interview.language,
+        resumeSummary,
+        previousQuestions,
+      });
+      generatedContent = generated.content;
     } catch (err: any) {
       console.warn('Gemini AI failed to generate question, using fallback:', err.message);
       const stageQuestions = PLACEHOLDER_QUESTIONS[stage] || PLACEHOLDER_QUESTIONS.Introduction;
@@ -110,6 +119,7 @@ export const generateAIQuestion = async (
         ? available[Math.floor(Math.random() * available.length)]
         : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
     }
+
 
     // 2. Persist question
     const question = await prisma.question.create({
@@ -357,40 +367,82 @@ export const nextInterviewTurn = async (
       await prisma.transcript.create({ data: { interviewId, text: transcriptChunk } });
     }
 
-    // ── 4. Generate next question ─────────────────────────────────────────────
+    // ── 4. Determine follow-up vs new question ────────────────────────────────
     const currentInterview = await prisma.interview.findUnique({
       where: { id: interviewId },
       include: {
         resume: true,
-        questions: { orderBy: { order: 'asc' } },
+        questions: { orderBy: { order: 'asc' }, include: { answer: true } },
       },
     });
 
     const totalAsked = currentInterview!.questions.length;
     const maxQuestions = INTERVIEW_STAGES.length * QUESTIONS_PER_STAGE;
+    const resumeSummary =
+      (currentInterview!.resume.parsedData as Record<string, string> | null)?.summary ??
+      `File: ${currentInterview!.resume.fileName}`;
 
     let nextQuestion = null;
     let tts = null;
     let interviewDone = false;
+    let isFollowUp = false;
 
     if (totalAsked < maxQuestions) {
-      const { stage: nextStage, stageIndex: nextStageIndex } = getCurrentStage(totalAsked);
+      // Read follow-up count from lightweight metadata stored in reportData.followUpMap
+      const reportMeta = (currentInterview!.reportData as any) ?? {};
+      const followUpMap: Record<string, number> = reportMeta.followUpMap ?? {};
+      const currentFollowUpCount = followUpMap[questionId] ?? 0;
+
+      const { stage: nextStage } = getCurrentStage(totalAsked);
       const previousQuestions = currentInterview!.questions.map((q) => q.content);
-      const resumeSummary =
-        (currentInterview!.resume.parsedData as Record<string, string> | null)?.summary ??
-        `File: ${currentInterview!.resume.fileName}`;
 
       let generatedContent = '';
-      try {
-        const context = `Stage: ${nextStage}, Category: ${currentInterview!.category}, Language: ${currentInterview!.language}, Resume: ${resumeSummary}`;
-        generatedContent = await generateInterviewQuestion(context);
-      } catch (err: any) {
-        console.warn('Gemini AI failed to generate question, using fallback:', err.message);
-        const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
-        const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
-        generatedContent = available.length > 0
-          ? available[Math.floor(Math.random() * available.length)]
-          : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+
+      if (currentFollowUpCount < MAX_FOLLOW_UPS) {
+        // ── Generate follow-up based on the last answer ───────────────────────
+        try {
+          const followUp = await generateFollowUpQuestion({
+            lastQuestion: question.content,
+            userAnswer: answerContent,
+            resumeSummary,
+            category: currentInterview!.category,
+            language: currentInterview!.language,
+            stage,
+          });
+          generatedContent = followUp.content;
+          isFollowUp = true;
+
+          // Persist updated follow-up count
+          const updatedFollowUpMap = { ...followUpMap, [questionId]: currentFollowUpCount + 1 };
+          await prisma.interview.update({
+            where: { id: interviewId },
+            data: { reportData: { ...reportMeta, followUpMap: updatedFollowUpMap } as any },
+          });
+        } catch (err: any) {
+          console.warn('[FollowUp] Follow-up generation failed, advancing to new question:', err.message);
+          isFollowUp = false;
+        }
+      }
+
+      if (!isFollowUp) {
+        // ── Follow-up cap reached — generate fresh main question ─────────────
+        try {
+          const generated = await generateInterviewQuestion({
+            stage: nextStage,
+            category: currentInterview!.category,
+            language: currentInterview!.language,
+            resumeSummary,
+            previousQuestions,
+          });
+          generatedContent = generated.content;
+        } catch (err: any) {
+          console.warn('[Question] New question generation failed, using fallback:', err.message);
+          const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
+          const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
+          generatedContent = available.length > 0
+            ? available[Math.floor(Math.random() * available.length)]
+            : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+        }
       }
 
       nextQuestion = await prisma.question.create({
@@ -409,6 +461,7 @@ export const nextInterviewTurn = async (
     } else {
       interviewDone = true;
     }
+
 
     res.status(200).json({
       answeredQuestion: {

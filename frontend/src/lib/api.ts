@@ -84,3 +84,8 @@ export const aiAPI = {
   speak: (text: string, language = 'English') =>
     api.post('/ai/speak', { text, language }),
 };
+
+export const paymentAPI = {
+  createSession: (planId: string) => api.post('/payments/create-checkout-session', { planId }),
+  history: () => api.get('/payments/history'),
+};

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { resumeAPI, interviewAPI } from '@/lib/api';
 import { useInterviewStore } from '@/store/globalStore';
 import { FileText, Briefcase, Globe, ChevronRight } from 'lucide-react';
+import UpgradeModal from '@/components/UpgradeModal';
 
 const CATEGORIES = ['Software Developer', 'HR Interview', 'Government Jobs', 'SSC', 'UPSC', 'Banking', 'Custom Role'];
 const LANGUAGES = ['English', 'Hindi', 'Assamese', 'Tamil', 'Bengali'];
@@ -18,6 +19,7 @@ export default function InterviewSetupPage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [form, setForm] = useState({ resumeId: '', category: '', language: 'English' });
   const [loading, setLoading] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
     resumeAPI.list().then((r) => {
@@ -38,7 +40,11 @@ export default function InterviewSetupPage() {
       setInterview(interviewId);
       router.push(`/interview/${interviewId}`);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to start interview');
+      if (err?.response?.data?.code === "NO_CREDITS") {
+        setShowUpgradeModal(true);
+      } else {
+        toast.error(err?.response?.data?.message || 'Failed to start interview');
+      }
     } finally { setLoading(false); }
   };
 
@@ -49,6 +55,11 @@ export default function InterviewSetupPage() {
           <h1 className="text-3xl font-bold text-white">Setup Interview</h1>
           <p className="mt-2" style={{ color: '#8888aa' }}>Configure your AI interview session</p>
         </div>
+
+        <UpgradeModal 
+          isOpen={showUpgradeModal} 
+          onClose={() => setShowUpgradeModal(false)} 
+        />
 
         <form onSubmit={handleStart} className="glass-card p-8 space-y-6">
           {/* Resume */}

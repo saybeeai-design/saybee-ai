@@ -39,7 +39,11 @@ export const startInterview = async (
     // Check Credits
     const userCheck = await prisma.user.findUnique({ where: { id: userId } });
     if (!userCheck || userCheck.credits <= 0) {
-      res.status(403).json({ message: 'Insufficient interview credits. Please upgrade your plan.' });
+      res.status(403).json({ 
+        success: false,
+        code: "NO_CREDITS",
+        message: 'No credits left'
+      });
       return;
     }
 

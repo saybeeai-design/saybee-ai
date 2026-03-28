@@ -53,15 +53,15 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
           Welcome back, <span style={{ color: '#6c63ff' }}>{user?.name?.split(' ')[0] ?? 'there'}</span> 👋
         </h1>
-        <p className="mt-1 text-sm" style={{ color: '#8888aa' }}>Track your progress and start a new AI interview session.</p>
+        <p className="mt-1.5 text-sm" style={{ color: '#8888aa' }}>Track your progress and start a new AI interview session.</p>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
         {statCards.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="stat-card">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-2" style={{ background: `${color}18` }}>
@@ -74,11 +74,11 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent interviews */}
-      <div className="glass-card p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="glass-card p-4 md:p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <h2 className="text-lg font-semibold text-white">Recent Interviews</h2>
-          <Link href="/interview/setup" className="btn-primary text-sm px-4 py-2">
-            <Plus className="w-4 h-4" /> New Interview
+          <Link href="/interview/setup" className="btn-primary text-sm px-4 py-2 w-full sm:w-auto min-h-[48px] justify-center items-center flex">
+            <Plus className="w-4 h-4 mr-2" /> New Interview
           </Link>
         </div>
 
@@ -88,8 +88,8 @@ export default function DashboardPage() {
           <div className="text-center py-12">
             <VideoIcon className="w-12 h-12 mx-auto mb-3" style={{ color: '#8888aa' }} />
             <p className="font-medium text-white mb-1">No interviews yet</p>
-            <p className="text-sm mb-4" style={{ color: '#8888aa' }}>Start your first AI interview session</p>
-            <Link href="/interview/setup" className="btn-primary text-sm inline-flex">Start Interview</Link>
+            <p className="text-sm mb-6" style={{ color: '#8888aa' }}>Start your first AI interview session</p>
+            <Link href="/interview/setup" className="btn-primary text-sm w-full sm:w-auto inline-flex justify-center min-h-[48px] items-center">Start Interview</Link>
           </div>
         ) : (
           <div className="space-y-3">

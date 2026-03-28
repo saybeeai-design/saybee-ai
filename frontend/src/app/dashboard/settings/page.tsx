@@ -80,15 +80,15 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <SettingsIcon className="w-8 h-8 text-blue-500" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+            <SettingsIcon className="w-7 h-7 sm:w-8 sm:h-8 text-blue-500" />
             Settings
           </h1>
-          <p className="text-slate-400 mt-1">Manage your account settings and preferences.</p>
+          <p className="text-sm sm:text-base text-slate-400 mt-1">Manage your account settings and preferences.</p>
         </div>
-        <button className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
+        <button className="flex w-full sm:w-auto items-center justify-center gap-2 px-6 py-2.5 min-h-[48px] bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-500 transition-all shadow-lg shadow-blue-500/20 active:scale-95">
           <Save className="w-4 h-4" />
           Save Changes
         </button>
@@ -139,7 +139,7 @@ export default function SettingsPage() {
               </div>
 
               {section.action && (
-                <button className={`mt-6 w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-lg active:scale-[0.98] ${section.action.color} hover:brightness-110`}>
+                <button className={`mt-6 w-full py-2.5 min-h-[48px] rounded-xl text-sm font-bold text-white transition-all shadow-lg active:scale-[0.98] ${section.action.color} hover:brightness-110 flex items-center justify-center`}>
                   {section.action.label}
                 </button>
               )}
@@ -169,7 +169,7 @@ export default function SettingsPage() {
             <p className="text-sm font-semibold text-white">Delete Account</p>
             <p className="text-xs text-slate-500 mt-1">Once you delete your account, there is no going back. Please be certain.</p>
           </div>
-          <button className="px-6 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap">
+          <button className="px-6 py-2 min-h-[48px] w-full sm:w-auto bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl transition-colors whitespace-nowrap flex items-center justify-center shadow-lg shadow-rose-500/20 active:scale-95">
             Delete Account
           </button>
         </div>
