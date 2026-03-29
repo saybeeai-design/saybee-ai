@@ -4,7 +4,14 @@ import SuccessContent from './SuccessContent';
 
 export const dynamic = 'force-dynamic';
 
-export default function BillingSuccessPage() {
+export default async function BillingSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const sessionId = typeof params.session_id === 'string' ? params.session_id : undefined;
+
   return (
     <Suspense
       fallback={
@@ -13,7 +20,7 @@ export default function BillingSuccessPage() {
         </div>
       }
     >
-      <SuccessContent />
+      <SuccessContent sessionId={sessionId} />
     </Suspense>
   );
 }

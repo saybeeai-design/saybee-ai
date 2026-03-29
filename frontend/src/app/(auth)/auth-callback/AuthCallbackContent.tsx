@@ -1,20 +1,16 @@
 'use client';
 import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/globalStore';
 import { userAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 
-export default function AuthCallbackContent() {
+export default function AuthCallbackContent({ token, error }: { token?: string | null; error?: string | null }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { setAuth } = useAuthStore();
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const err = searchParams.get('error');
-
-    if (err) {
+    if (error) {
       toast.error('Google Authentication Failed');
       router.push('/login');
       return;
@@ -36,7 +32,7 @@ export default function AuthCallbackContent() {
     } else {
       router.push('/login');
     }
-  }, [searchParams, router, setAuth]);
+  }, [token, error, router, setAuth]);
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-bg">

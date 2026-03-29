@@ -16,6 +16,9 @@ import {
   Brain
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuthStore } from '@/store/globalStore';
+import UpgradeModal from '@/components/UpgradeModal';
+
 
 export default function InterviewDashboard() {
   const router = useRouter();
@@ -23,6 +26,8 @@ export default function InterviewDashboard() {
   const [interviews, setInterviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const { user } = useAuthStore();
 
   // Form State
   const [selectedResume, setSelectedResume] = useState('');
@@ -52,6 +57,11 @@ export default function InterviewDashboard() {
   const handleStartInterview = async () => {
     if (!selectedResume) {
       setError('Please select a resume to continue.');
+      return;
+    }
+
+    if (!user || user.credits <= 0) {
+      setIsUpgradeModalOpen(true);
       return;
     }
 
@@ -259,6 +269,11 @@ export default function InterviewDashboard() {
           </div>
         </div>
       </div>
+
+      <UpgradeModal 
+        isOpen={isUpgradeModalOpen} 
+        onClose={() => setIsUpgradeModalOpen(false)} 
+      />
     </div>
   );
 }

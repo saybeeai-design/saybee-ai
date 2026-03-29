@@ -1,16 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { userAPI } from '@/lib/api';
 import { useAuthStore } from '@/store/globalStore';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
-export default function SuccessContent() {
+export default function SuccessContent({ sessionId }: { sessionId?: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('session_id');
   const { updateUser } = useAuthStore();
   const [verifying, setVerifying] = useState(true);
 

@@ -1,16 +1,12 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
-import Stripe from 'stripe';
 import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { razorpay, isRazorpayStub, PLANS } from '../services/razorpayService';
+import { sendPaymentSuccessEmail } from '../services/emailService';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_stub', {
-  apiVersion: '2025-02-24.acacia' as any, // Using generic typing for resilience
-});
-
-const isStubMode = !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('stub');
-
-// ─── POST /api/payments/create-checkout-session ──────────────────────────────
-export const createCheckoutSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+// ─── POST /api/payments/create-order ─────────────────────────────────────────
+export const createOrder = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -18,92 +14,153 @@ export const createCheckoutSession = async (req: AuthenticatedRequest, res: Resp
       return;
     }
 
-    const { planId } = req.body; // e.g. 'PRO' or 'ENTERPRISE'
-    
-    // In a real app, map planId to Stripe Price ID
-    const priceId = planId === 'PRO' ? 'price_pro_stub' : 'price_enterprise_stub';
+    const { plan } = req.body as { plan: string };
+    const planConfig = PLANS[plan?.toLowerCase()];
 
-    if (isStubMode) {
-      // Return a simulated URL that immediately triggers a success fallback
-      res.status(200).json({ url: `/dashboard/billing/success?session_id=stub_session_${Date.now()}` });
+    if (!planConfig) {
+      res.status(400).json({
+        message: `Invalid plan. Valid options: ${Object.keys(PLANS).join(', ')}`,
+      });
       return;
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.FRONTEND_URL}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/dashboard/billing`,
-      client_reference_id: userId,
-      metadata: { userId, planId }
+    // Stub / test mode — return a fake order so the frontend can test the flow
+    if (isRazorpayStub) {
+      console.log(`[Razorpay Stub] Creating order for plan: ${plan}, amount: ₹${planConfig.amount / 100}`);
+      res.status(200).json({
+        orderId: `stub_order_${Date.now()}`,
+        amount: planConfig.amount,
+        currency: planConfig.currency,
+        plan,
+        stub: true,
+      });
+      return;
+    }
+
+    const order = await razorpay!.orders.create({
+      amount: planConfig.amount,
+      currency: planConfig.currency,
+      receipt: `rcpt_${userId.slice(0, 8)}_${Date.now()}`,
+      notes: { userId, plan },
     });
 
-    res.status(200).json({ url: session.url });
+    res.status(200).json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      plan,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// ─── POST /api/payments/webhook ─────────────────────────────────────────────
-// Note: Webhook needs to be parsed using express.raw() in app.ts before reaching here if verifying signatures.
-export const stripeWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// ─── POST /api/payments/verify ────────────────────────────────────────────────
+export const verifyPayment = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    let event;
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
 
-    if (isStubMode) {
-      // Just simulate webhook logic
-      event = req.body;
-      if (!event.type) event.type = 'checkout.session.completed';
-    } else {
-      const sig = req.headers['stripe-signature'] as string;
-      try {
-        event = stripe.webhooks.constructEvent(
-          req.body, // In real scenario req.body needs to be Buffer
-          sig,
-          process.env.STRIPE_WEBHOOK_SECRET!
-        );
-      } catch (err: any) {
-        res.status(400).send(`Webhook Error: ${err.message}`);
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan } = req.body as {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+      plan: string;
+    };
+
+    const planConfig = PLANS[plan?.toLowerCase()];
+    if (!planConfig) {
+      res.status(400).json({ message: 'Invalid plan.' });
+      return;
+    }
+
+    // ── Signature Verification ──────────────────────────────────────────────
+    if (!isRazorpayStub) {
+      const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+        .update(body)
+        .digest('hex');
+
+      if (expectedSignature !== razorpay_signature) {
+        res.status(400).json({ message: 'Payment verification failed. Invalid signature.' });
         return;
       }
+    } else {
+      console.log(`[Razorpay Stub] Skipping signature verification for stub order.`);
     }
 
-    // Handle the event
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.client_reference_id || session.metadata?.userId;
-      const planId = session.metadata?.planId || 'PRO';
+    // ── Update DB ──────────────────────────────────────────────────────────
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        credits: { increment: planConfig.credits },
+        isPaid: true,
+        subscriptionType: planConfig.subscriptionType,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        credits: true,
+        subscriptionType: true,
+        isPaid: true,
+        role: true,
+      },
+    });
 
-      if (userId) {
-        // Upgrade User
-        await prisma.user.update({
-          where: { id: userId },
-          data: { 
-            stripeCustomerId: session.customer as string,
-            credits: { increment: planId === 'PRO' ? 10 : 50 } // Allocate credits
-          }
-        });
+    // ── Log Subscription ───────────────────────────────────────────────────
+    await prisma.subscription.create({
+      data: {
+        userId,
+        plan: planConfig.subscriptionType,
+        status: 'ACTIVE',
+      },
+    });
 
-        // Upsert Subscription
-        await prisma.subscription.create({
-          data: {
-            userId,
-            plan: planId,
-            status: 'ACTIVE',
-            stripeSubscriptionId: session.subscription as string,
-          }
-        });
-      }
+    // ── Log Usage ──────────────────────────────────────────────────────────
+    await prisma.usageLog.create({
+      data: {
+        userId,
+        action: 'PAYMENT_SUCCESS',
+        details: JSON.stringify({
+          plan,
+          credits: planConfig.credits,
+          amount: planConfig.amount,
+          razorpay_payment_id,
+          razorpay_order_id,
+        }),
+      },
+    });
+
+    // ── Send Email ─────────────────────────────────────────────────────────
+    try {
+      await sendPaymentSuccessEmail(
+        updatedUser.email,
+        updatedUser.name ?? 'there',
+        planConfig.subscriptionType,
+        planConfig.credits,
+        planConfig.amount
+      );
+    } catch (emailErr) {
+      console.error('[Email] Failed to send payment success email:', emailErr);
+      // Non-fatal — don't block the response
     }
 
-    res.status(200).json({ received: true });
+    res.status(200).json({
+      message: 'Payment verified successfully!',
+      user: updatedUser,
+      creditsAdded: planConfig.credits,
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// ─── GET /api/payments/history ─────────────────────────────────────────────
+// ─── GET /api/payments/history ────────────────────────────────────────────────
 export const getBillingHistory = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user?.userId;
@@ -114,7 +171,7 @@ export const getBillingHistory = async (req: AuthenticatedRequest, res: Response
 
     const subscriptions = await prisma.subscription.findMany({
       where: { userId },
-      orderBy: { startDate: 'desc' }
+      orderBy: { startDate: 'desc' },
     });
 
     res.status(200).json({ subscriptions });

@@ -1,15 +1,19 @@
 import { Router, RequestHandler } from 'express';
-import { createCheckoutSession, stripeWebhook, getBillingHistory } from '../controllers/paymentController';
+import { createOrder, verifyPayment, getBillingHistory } from '../controllers/paymentController';
 import { protect } from '../middlewares/authMiddleware';
 
 const router = Router();
 
-// Webhook must be public for Stripe to reach it
-router.post('/webhook', stripeWebhook as unknown as RequestHandler);
-
-// Protected routes
+// All payment routes require authentication
 router.use(protect as RequestHandler);
-router.post('/create-checkout-session', createCheckoutSession as unknown as RequestHandler);
+
+// POST /api/payments/create-order  → Razorpay order creation
+router.post('/create-order', createOrder as unknown as RequestHandler);
+
+// POST /api/payments/verify  → Signature verification + credit allocation
+router.post('/verify', verifyPayment as unknown as RequestHandler);
+
+// GET /api/payments/history  → User's billing history
 router.get('/history', getBillingHistory as unknown as RequestHandler);
 
 export default router;

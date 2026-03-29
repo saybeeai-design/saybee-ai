@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu, Brain } from 'lucide-react';
+import { Menu } from 'lucide-react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '@/components/layout/Sidebar';
 import { useAuthStore } from '@/store/globalStore';
@@ -11,6 +12,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname, isMobile]);
 
   return (
-    <div className="flex min-h-screen bg-[#0f172a] text-slate-200 overflow-hidden">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-300">
       {/* Mobile Backdrop */}
       <AnimatePresence>
         {isMobile && sidebarOpen && (
@@ -48,22 +50,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)} 
         isMobile={isMobile} 
+        isCollapsed={isCollapsed}
+        toggleCollapse={() => setIsCollapsed(!isCollapsed)}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 relative h-screen overflow-hidden">
         {/* Mobile Header */}
-        <header className="lg:hidden flex items-center justify-between p-4 border-b border-slate-800 bg-[#0f172a]/90 backdrop-blur-lg sticky top-0 z-30">
+        <header className="lg:hidden flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-[#0f172a]/90 backdrop-blur-lg sticky top-0 z-30 transition-colors duration-300">
           <button 
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-2 rounded-lg hover:bg-slate-800/50 text-white transition-colors"
+            className="p-2 -ml-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800/50 text-slate-900 dark:text-white transition-colors"
           >
             <Menu className="w-6 h-6" />
           </button>
           
           <div className="flex items-center gap-2 absolute left-1/2 -translate-x-1/2 pointer-events-none sm:pointer-events-auto">
-            <Brain className="w-5 h-5 text-blue-500 hidden sm:block" />
-            <span className="font-bold text-white tracking-tight text-sm sm:text-base hidden sm:block">SayBee AI</span>
+            <div className="relative w-6 h-6 hidden sm:block rounded-md overflow-hidden shrink-0">
+               <Image src="/logo.png" alt="SayBee AI Logo" fill className="object-cover" />
+            </div>
+            <span className="font-bold text-slate-900 dark:text-white tracking-tight text-sm sm:text-base hidden sm:block">SayBee AI</span>
           </div>
 
           <div className="flex items-center gap-3">

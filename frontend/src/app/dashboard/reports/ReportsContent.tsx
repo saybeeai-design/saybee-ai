@@ -1,7 +1,7 @@
 /* eslint-disable */
 'use client';
 import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { interviewAPI } from '@/lib/api';
 import { CheckCircle, TrendingUp, AlertCircle, Lightbulb, FileText, ArrowLeft, Download } from 'lucide-react';
@@ -20,10 +20,8 @@ function ScoreMeter({ label, value, color }: { label: string; value: number; col
   );
 }
 
-export default function ReportsContent() {
-  const params = useSearchParams();
+export default function ReportsContent({ id }: { id?: string | null }) {
   const router = useRouter();
-  const id = params.get('id');
   const [interview, setInterview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 

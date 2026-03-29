@@ -13,9 +13,10 @@ model User {
   password         String?
   name             String?
   role             String         @default("USER")
-  credits          Int            @default(2)
-  isPaid           Boolean        @default(false)
-  stripeCustomerId String?
+  credits            Int            @default(2)
+  isPaid             Boolean        @default(false)
+  stripeCustomerId   String?
+  subscriptionType   String         @default("FREE")
   
   // Google OAuth support
   googleId         String?        @unique

@@ -3,7 +3,15 @@ import AuthCallbackContent from './AuthCallbackContent';
 
 export const dynamic = 'force-dynamic';
 
-export default function AuthCallbackPage() {
+export default async function AuthCallbackPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const token = typeof params.token === 'string' ? params.token : undefined;
+  const error = typeof params.error === 'string' ? params.error : undefined;
+
   return (
     <Suspense
       fallback={
@@ -12,7 +20,7 @@ export default function AuthCallbackPage() {
         </div>
       }
     >
-      <AuthCallbackContent />
+      <AuthCallbackContent token={token} error={error} />
     </Suspense>
   );
 }

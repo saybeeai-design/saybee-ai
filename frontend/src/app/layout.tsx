@@ -7,6 +7,7 @@ Sentry.init({
 });
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
   title: 'SayBee AI — AI Interview Platform',
@@ -15,14 +16,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className="gradient-bg min-h-screen antialiased">
-        {children}
-        <Toaster
+      <body className="gradient-bg min-h-screen antialiased text-slate-900 bg-slate-50 dark:text-slate-200 dark:bg-[#0f172a] transition-colors duration-300">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster
           position="top-right"
           toastOptions={{
             style: {
@@ -36,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             error: { iconTheme: { primary: '#ff4d6d', secondary: '#16161e' } },
           }}
         />
+        </ThemeProvider>
       </body>
     </html>
   );

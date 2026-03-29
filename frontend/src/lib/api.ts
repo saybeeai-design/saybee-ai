@@ -86,6 +86,12 @@ export const aiAPI = {
 };
 
 export const paymentAPI = {
-  createSession: (planId: string) => api.post('/payments/create-checkout-session', { planId }),
+  createOrder: (plan: string) => api.post('/payments/create-order', { plan }),
+  verify: (data: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+    plan: string;
+  }) => api.post('/payments/verify', data),
   history: () => api.get('/payments/history'),
 };
