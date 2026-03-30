@@ -1,27 +1,26 @@
-import express, { Application, Request, Response } from 'express';
+﻿import 'dotenv/config';
+import express, { Application, NextFunction, Request, Response } from 'express';
 import * as Sentry from '@sentry/node';
-
-Sentry.init({
-  dsn: process.env.SENTRY_DSN || '',
-  tracesSampleRate: 1.0,
-});
 import cors from 'cors';
-import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { errorHandler, notFound } from './middlewares/errorMiddleware';
-import authRoutes from './routes/authRoutes';
-import userRoutes from './routes/userRoutes';
-import resumeRoutes from './routes/resumeRoutes';
-import interviewRoutes from './routes/interviewRoutes';
-import answerRoutes from './routes/answerRoutes';
-import aiRoutes from './routes/aiRoutes';
-import adminRoutes from './routes/adminRoutes';
-import paymentRoutes from './routes/paymentRoutes';
-import couponRoutes from './routes/couponRoutes';
 import passport from './config/passport';
+import { errorHandler, notFound } from './middlewares/errorMiddleware';
+import adminRoutes from './routes/adminRoutes';
+import aiRoutes from './routes/aiRoutes';
+import answerRoutes from './routes/answerRoutes';
+import authRoutes from './routes/authRoutes';
+import couponRoutes from './routes/couponRoutes';
+import interviewRoutes from './routes/interviewRoutes';
+import paymentRoutes from './routes/paymentRoutes';
+import resumeRoutes from './routes/resumeRoutes';
+import userRoutes from './routes/userRoutes';
+import { ensureDatabaseConnection, getDatabaseStatus } from './services/dbService';
 
-dotenv.config();
+Sentry.init({
+  dsn: process.env.SENTRY_DSN || undefined,
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+});
 
 const requiredEnvVars = [
   'DATABASE_URL',
@@ -32,75 +31,99 @@ const requiredEnvVars = [
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
   'SMTP_USER',
-  'SMTP_PASS'
+  'SMTP_PASS',
 ];
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    console.error(`❌ Missing required environment variable: ${envVar}`);
+    console.error(`Missing required environment variable: ${envVar}`);
     process.exit(1);
   }
 }
 
 const app: Application = express();
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+// Render forwards the client IP through a proxy, so trust the first hop.
+app.set('trust proxy', 1);
+
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',')
+      : ['http://localhost:3000'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
-
-// ─── Security Enhancements ────────────────────────────────────────────────────
 app.use(helmet());
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // Limit each IP to 150 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 150,
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health',
 });
 app.use('/api', limiter);
 
 const aiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each IP to 30 AI requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 30,
   message: 'Too many AI requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// ─── Welcome Root ─────────────────────────────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {
   res.status(200).send('SayBee AI Backend is running! Access the API at /api/health');
 });
 
-// ─── Health Check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    await ensureDatabaseConnection();
+  } catch {
+    // Keep the process healthy and surface the DB state in the payload instead.
+  }
+
+  const databaseStatus = getDatabaseStatus();
+
   res.status(200).json({
-    status: 'success',
-    message: 'SayBee AI Backend is running ✅',
+    status: databaseStatus.connected ? 'ok' : 'degraded',
+    database: databaseStatus.connected ? 'connected' : 'disconnected',
+    details: databaseStatus,
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: process.env.npm_package_version ?? '1.0.0',
   });
 });
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);            // Auth (public)
-app.use('/api/users', userRoutes);           // User profile
-app.use('/api/resumes', resumeRoutes);       // Resume upload/management
-app.use('/api/interviews', aiLimiter, interviewRoutes); // Interview sessions + questions + AI
-app.use('/api/questions', aiLimiter, answerRoutes);     // Answer submission + AI evaluation
-app.use('/api/ai', aiLimiter, aiRoutes);               // STT + TTS utilities
-app.use('/api/admin', adminRoutes);         // Admin dashboard endpoints
-app.use('/api/payments', paymentRoutes);    // Stripe Subscriptions
-app.use('/api/coupons', couponRoutes);      // Promotional Coupons
+app.use('/api', async (req: Request, _res: Response, next: NextFunction) => {
+  if (req.path === '/health') {
+    next();
+    return;
+  }
 
-// ─── Error Handling ───────────────────────────────────────────────────────────
+  try {
+    await ensureDatabaseConnection();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/resumes', resumeRoutes);
+app.use('/api/interviews', aiLimiter, interviewRoutes);
+app.use('/api/questions', aiLimiter, answerRoutes);
+app.use('/api/ai', aiLimiter, aiRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/coupons', couponRoutes);
+
 Sentry.setupExpressErrorHandler(app);
 app.use(notFound);
 app.use(errorHandler);

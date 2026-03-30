@@ -32,99 +32,130 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const Sentry = __importStar(require("@sentry/node"));
-Sentry.init({
-    dsn: process.env.SENTRY_DSN || '',
-    tracesSampleRate: 1.0,
-});
 const cors_1 = __importDefault(require("cors"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
-const errorMiddleware_1 = require("./middlewares/errorMiddleware");
-const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
-const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
-const resumeRoutes_1 = __importDefault(require("./routes/resumeRoutes"));
-const interviewRoutes_1 = __importDefault(require("./routes/interviewRoutes"));
-const answerRoutes_1 = __importDefault(require("./routes/answerRoutes"));
-const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
-const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
-const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
-const couponRoutes_1 = __importDefault(require("./routes/couponRoutes"));
 const passport_1 = __importDefault(require("./config/passport"));
-dotenv_1.default.config();
+const errorMiddleware_1 = require("./middlewares/errorMiddleware");
+const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
+const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
+const answerRoutes_1 = __importDefault(require("./routes/answerRoutes"));
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const couponRoutes_1 = __importDefault(require("./routes/couponRoutes"));
+const interviewRoutes_1 = __importDefault(require("./routes/interviewRoutes"));
+const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
+const resumeRoutes_1 = __importDefault(require("./routes/resumeRoutes"));
+const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
+const dbService_1 = require("./services/dbService");
+Sentry.init({
+    dsn: process.env.SENTRY_DSN || undefined,
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+});
 const requiredEnvVars = [
     'DATABASE_URL',
     'JWT_SECRET',
     'GEMINI_API_KEY',
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
-    'STRIPE_SECRET_KEY',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
     'SMTP_USER',
-    'SMTP_PASS'
+    'SMTP_PASS',
 ];
 for (const envVar of requiredEnvVars) {
     if (!process.env[envVar]) {
-        console.error(`❌ Missing required environment variable: ${envVar}`);
+        console.error(`Missing required environment variable: ${envVar}`);
         process.exit(1);
     }
 }
 const app = (0, express_1.default)();
-// ─── Middleware ───────────────────────────────────────────────────────────────
+// Render forwards the client IP through a proxy, so trust the first hop.
+app.set('trust proxy', 1);
 app.use((0, cors_1.default)({
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'],
+    origin: process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(',')
+        : ['http://localhost:3000'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use(passport_1.default.initialize());
-// ─── Security Enhancements ────────────────────────────────────────────────────
 app.use((0, helmet_1.default)());
 const limiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 150, // Limit each IP to 150 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 150,
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.path === '/health',
 });
 app.use('/api', limiter);
 const aiLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 30, // Limit each IP to 30 AI requests per window
+    windowMs: 15 * 60 * 1000,
+    max: 30,
     message: 'Too many AI requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
 });
-// ─── Welcome Root ─────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
     res.status(200).send('SayBee AI Backend is running! Access the API at /api/health');
 });
-// ─── Health Check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        yield (0, dbService_1.ensureDatabaseConnection)();
+    }
+    catch (_b) {
+        // Keep the process healthy and surface the DB state in the payload instead.
+    }
+    const databaseStatus = (0, dbService_1.getDatabaseStatus)();
     res.status(200).json({
-        status: 'success',
-        message: 'SayBee AI Backend is running ✅',
+        status: databaseStatus.connected ? 'ok' : 'degraded',
+        database: databaseStatus.connected ? 'connected' : 'disconnected',
+        details: databaseStatus,
         timestamp: new Date().toISOString(),
-        version: '1.0.0',
+        version: (_a = process.env.npm_package_version) !== null && _a !== void 0 ? _a : '1.0.0',
     });
-});
-// ─── Routes ──────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes_1.default); // Auth (public)
-app.use('/api/users', userRoutes_1.default); // User profile
-app.use('/api/resumes', resumeRoutes_1.default); // Resume upload/management
-app.use('/api/interviews', aiLimiter, interviewRoutes_1.default); // Interview sessions + questions + AI
-app.use('/api/questions', aiLimiter, answerRoutes_1.default); // Answer submission + AI evaluation
-app.use('/api/ai', aiLimiter, aiRoutes_1.default); // STT + TTS utilities
-app.use('/api/admin', adminRoutes_1.default); // Admin dashboard endpoints
-app.use('/api/payments', paymentRoutes_1.default); // Stripe Subscriptions
-app.use('/api/coupons', couponRoutes_1.default); // Promotional Coupons
-// ─── Error Handling ───────────────────────────────────────────────────────────
+}));
+app.use('/api', (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    if (req.path === '/health') {
+        next();
+        return;
+    }
+    try {
+        yield (0, dbService_1.ensureDatabaseConnection)();
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
+}));
+app.use('/api/auth', authRoutes_1.default);
+app.use('/api/users', userRoutes_1.default);
+app.use('/api/resumes', resumeRoutes_1.default);
+app.use('/api/interviews', aiLimiter, interviewRoutes_1.default);
+app.use('/api/questions', aiLimiter, answerRoutes_1.default);
+app.use('/api/ai', aiLimiter, aiRoutes_1.default);
+app.use('/api/admin', adminRoutes_1.default);
+app.use('/api/payments', paymentRoutes_1.default);
+app.use('/api/coupons', couponRoutes_1.default);
 Sentry.setupExpressErrorHandler(app);
 app.use(errorMiddleware_1.notFound);
 app.use(errorMiddleware_1.errorHandler);

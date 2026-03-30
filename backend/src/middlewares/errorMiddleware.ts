@@ -1,14 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
+import {
+  isRecoverableDatabaseError,
+  markDatabaseUnhealthy,
+  reconnectDatabaseInBackground,
+} from '../services/dbService';
 
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
+const isProduction = process.env.NODE_ENV === 'production';
+
+export const errorHandler = (err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) {
+    next(err as any);
+    return;
+  }
+
+  if (isRecoverableDatabaseError(err)) {
+    markDatabaseUnhealthy(err);
+    reconnectDatabaseInBackground('request error');
+
+    res.status(503).json({
+      code: 'DATABASE_UNAVAILABLE',
+      message: 'Database connection was interrupted. Please retry in a few seconds.',
+    });
+    return;
+  }
+
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  const error = err instanceof Error ? err : new Error('Internal Server Error');
+
   res.status(statusCode);
-  
-  console.error(`[Error] ${err.message}`);
-  
+
+  console.error(`[Error] ${error.message}`);
+
   res.json({
-    message: err.message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    message: statusCode >= 500 && isProduction ? 'Internal Server Error' : error.message,
+    stack: isProduction ? null : error.stack ?? null,
   });
 };
 

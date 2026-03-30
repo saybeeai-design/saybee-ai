@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendPasswordReset = exports.sendInterviewReport = exports.sendSignupConfirmation = void 0;
+exports.sendPaymentSuccessEmail = exports.sendPasswordReset = exports.sendInterviewReport = exports.sendSignupConfirmation = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const transporter = nodemailer_1.default.createTransport({
     host: process.env.SMTP_HOST || 'smtp.ethereal.email',
@@ -64,3 +64,47 @@ const sendPasswordReset = (email, resetToken) => __awaiter(void 0, void 0, void 
     });
 });
 exports.sendPasswordReset = sendPasswordReset;
+const sendPaymentSuccessEmail = (email, name, planName, credits, amount) => __awaiter(void 0, void 0, void 0, function* () {
+    if (isStubMode) {
+        console.log(`[Email Stub] Payment success email sent to ${email} — Plan: ${planName}, Credits: +${credits}`);
+        return;
+    }
+    const dashboardUrl = `${process.env.FRONTEND_URL}/dashboard`;
+    yield transporter.sendMail({
+        from: '"SayBee AI" <noreply@saybee.ai>',
+        to: email,
+        subject: `🎉 Payment Successful – ${credits} Credit${credits > 1 ? 's' : ''} Added!`,
+        html: `
+      <!DOCTYPE html>
+      <html>
+        <body style="font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0;">
+          <div style="max-width: 520px; margin: 40px auto; background: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding: 32px; text-align: center;">
+              <div style="font-size: 48px; margin-bottom: 8px;">🎉</div>
+              <h1 style="color: #fff; margin: 0; font-size: 24px; font-weight: 700;">Payment Successful!</h1>
+              <p style="color: #bfdbfe; margin: 8px 0 0; font-size: 14px;">Welcome to ${planName}</p>
+            </div>
+            <div style="padding: 32px;">
+              <p style="font-size: 16px; color: #cbd5e1;">Hi <strong style="color: #f1f5f9;">${name}</strong>,</p>
+              <p style="color: #94a3b8; line-height: 1.6;">
+                Your payment of <strong style="color: #f1f5f9;">₹${(amount / 100).toFixed(0)}</strong> has been processed successfully.
+                We've added <strong style="color: #60a5fa;">${credits} credit${credits > 1 ? 's' : ''}</strong> to your SayBee AI account.
+              </p>
+              <div style="background: #0f172a; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #1e3a5f; text-align: center;">
+                <p style="margin: 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Credits Added</p>
+                <p style="margin: 8px 0 0; font-size: 42px; font-weight: 800; color: #60a5fa;">+${credits}</p>
+              </div>
+              <a href="${dashboardUrl}" style="display: block; background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; text-align: center; padding: 14px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px;">
+                Start Your Interview →
+              </a>
+            </div>
+            <div style="padding: 16px 32px; border-top: 1px solid #334155; text-align: center;">
+              <p style="color: #475569; font-size: 12px; margin: 0;">© 2025 SayBee AI · <a href="${dashboardUrl}" style="color: #3b82f6;">Dashboard</a></p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+    });
+});
+exports.sendPaymentSuccessEmail = sendPaymentSuccessEmail;

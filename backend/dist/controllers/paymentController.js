@@ -12,15 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBillingHistory = exports.stripeWebhook = exports.createCheckoutSession = void 0;
-const stripe_1 = __importDefault(require("stripe"));
+exports.getBillingHistory = exports.verifyPayment = exports.createOrder = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const db_1 = __importDefault(require("../config/db"));
-const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY || 'sk_test_stub', {
-    apiVersion: '2025-02-24.acacia', // Using generic typing for resilience
-});
-const isStubMode = !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('stub');
-// ─── POST /api/payments/create-checkout-session ──────────────────────────────
-const createCheckoutSession = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const razorpayService_1 = require("../services/razorpayService");
+const emailService_1 = require("../services/emailService");
+// ─── POST /api/payments/create-order ─────────────────────────────────────────
+const createOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
@@ -28,86 +26,134 @@ const createCheckoutSession = (req, res, next) => __awaiter(void 0, void 0, void
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        const { planId } = req.body; // e.g. 'PRO' or 'ENTERPRISE'
-        // In a real app, map planId to Stripe Price ID
-        const priceId = planId === 'PRO' ? 'price_pro_stub' : 'price_enterprise_stub';
-        if (isStubMode) {
-            // Return a simulated URL that immediately triggers a success fallback
-            res.status(200).json({ url: `/dashboard/billing/success?session_id=stub_session_${Date.now()}` });
+        const { plan } = req.body;
+        const planConfig = razorpayService_1.PLANS[plan === null || plan === void 0 ? void 0 : plan.toLowerCase()];
+        if (!planConfig) {
+            res.status(400).json({
+                message: `Invalid plan. Valid options: ${Object.keys(razorpayService_1.PLANS).join(', ')}`,
+            });
             return;
         }
-        const session = yield stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            mode: 'subscription',
-            line_items: [{ price: priceId, quantity: 1 }],
-            success_url: `${process.env.FRONTEND_URL}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.FRONTEND_URL}/dashboard/billing`,
-            client_reference_id: userId,
-            metadata: { userId, planId }
+        // Stub / test mode — return a fake order so the frontend can test the flow
+        if (razorpayService_1.isRazorpayStub) {
+            console.log(`[Razorpay Stub] Creating order for plan: ${plan}, amount: ₹${planConfig.amount / 100}`);
+            res.status(200).json({
+                orderId: `stub_order_${Date.now()}`,
+                amount: planConfig.amount,
+                currency: planConfig.currency,
+                plan,
+                stub: true,
+            });
+            return;
+        }
+        const order = yield razorpayService_1.razorpay.orders.create({
+            amount: planConfig.amount,
+            currency: planConfig.currency,
+            receipt: `rcpt_${userId.slice(0, 8)}_${Date.now()}`,
+            notes: { userId, plan },
         });
-        res.status(200).json({ url: session.url });
+        res.status(200).json({
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            plan,
+        });
     }
     catch (error) {
         next(error);
     }
 });
-exports.createCheckoutSession = createCheckoutSession;
-// ─── POST /api/payments/webhook ─────────────────────────────────────────────
-// Note: Webhook needs to be parsed using express.raw() in app.ts before reaching here if verifying signatures.
-const stripeWebhook = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+exports.createOrder = createOrder;
+// ─── POST /api/payments/verify ────────────────────────────────────────────────
+const verifyPayment = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     try {
-        let event;
-        if (isStubMode) {
-            // Just simulate webhook logic
-            event = req.body;
-            if (!event.type)
-                event.type = 'checkout.session.completed';
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
+        if (!userId) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return;
         }
-        else {
-            const sig = req.headers['stripe-signature'];
-            try {
-                event = stripe.webhooks.constructEvent(req.body, // In real scenario req.body needs to be Buffer
-                sig, process.env.STRIPE_WEBHOOK_SECRET);
-            }
-            catch (err) {
-                res.status(400).send(`Webhook Error: ${err.message}`);
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan } = req.body;
+        const planConfig = razorpayService_1.PLANS[plan === null || plan === void 0 ? void 0 : plan.toLowerCase()];
+        if (!planConfig) {
+            res.status(400).json({ message: 'Invalid plan.' });
+            return;
+        }
+        // ── Signature Verification ──────────────────────────────────────────────
+        if (!razorpayService_1.isRazorpayStub) {
+            const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+            const expectedSignature = crypto_1.default
+                .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+                .update(body)
+                .digest('hex');
+            if (expectedSignature !== razorpay_signature) {
+                res.status(400).json({ message: 'Payment verification failed. Invalid signature.' });
                 return;
             }
         }
-        // Handle the event
-        if (event.type === 'checkout.session.completed') {
-            const session = event.data.object;
-            const userId = session.client_reference_id || ((_a = session.metadata) === null || _a === void 0 ? void 0 : _a.userId);
-            const planId = ((_b = session.metadata) === null || _b === void 0 ? void 0 : _b.planId) || 'PRO';
-            if (userId) {
-                // Upgrade User
-                yield db_1.default.user.update({
-                    where: { id: userId },
-                    data: {
-                        stripeCustomerId: session.customer,
-                        credits: { increment: planId === 'PRO' ? 10 : 50 } // Allocate credits
-                    }
-                });
-                // Upsert Subscription
-                yield db_1.default.subscription.create({
-                    data: {
-                        userId,
-                        plan: planId,
-                        status: 'ACTIVE',
-                        stripeSubscriptionId: session.subscription,
-                    }
-                });
-            }
+        else {
+            console.log(`[Razorpay Stub] Skipping signature verification for stub order.`);
         }
-        res.status(200).json({ received: true });
+        // ── Update DB ──────────────────────────────────────────────────────────
+        const updatedUser = yield db_1.default.user.update({
+            where: { id: userId },
+            data: {
+                credits: { increment: planConfig.credits },
+                isPaid: true,
+                subscriptionType: planConfig.subscriptionType,
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                credits: true,
+                subscriptionType: true,
+                isPaid: true,
+                role: true,
+            },
+        });
+        // ── Log Subscription ───────────────────────────────────────────────────
+        yield db_1.default.subscription.create({
+            data: {
+                userId,
+                plan: planConfig.subscriptionType,
+                status: 'ACTIVE',
+            },
+        });
+        // ── Log Usage ──────────────────────────────────────────────────────────
+        yield db_1.default.usageLog.create({
+            data: {
+                userId,
+                action: 'PAYMENT_SUCCESS',
+                details: JSON.stringify({
+                    plan,
+                    credits: planConfig.credits,
+                    amount: planConfig.amount,
+                    razorpay_payment_id,
+                    razorpay_order_id,
+                }),
+            },
+        });
+        // ── Send Email ─────────────────────────────────────────────────────────
+        try {
+            yield (0, emailService_1.sendPaymentSuccessEmail)(updatedUser.email, (_b = updatedUser.name) !== null && _b !== void 0 ? _b : 'there', planConfig.subscriptionType, planConfig.credits, planConfig.amount);
+        }
+        catch (emailErr) {
+            console.error('[Email] Failed to send payment success email:', emailErr);
+            // Non-fatal — don't block the response
+        }
+        res.status(200).json({
+            message: 'Payment verified successfully!',
+            user: updatedUser,
+            creditsAdded: planConfig.credits,
+        });
     }
     catch (error) {
         next(error);
     }
 });
-exports.stripeWebhook = stripeWebhook;
-// ─── GET /api/payments/history ─────────────────────────────────────────────
+exports.verifyPayment = verifyPayment;
+// ─── GET /api/payments/history ────────────────────────────────────────────────
 const getBillingHistory = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -118,7 +164,7 @@ const getBillingHistory = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         }
         const subscriptions = yield db_1.default.subscription.findMany({
             where: { userId },
-            orderBy: { startDate: 'desc' }
+            orderBy: { startDate: 'desc' },
         });
         res.status(200).json({ subscriptions });
     }

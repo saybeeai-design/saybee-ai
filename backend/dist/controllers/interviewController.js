@@ -42,7 +42,11 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         // Check Credits
         const userCheck = yield db_1.default.user.findUnique({ where: { id: userId } });
         if (!userCheck || userCheck.credits <= 0) {
-            res.status(403).json({ message: 'Insufficient interview credits. Please upgrade your plan.' });
+            res.status(403).json({
+                success: false,
+                code: "NO_CREDITS",
+                message: 'No credits left'
+            });
             return;
         }
         // Verify the resume belongs to the user

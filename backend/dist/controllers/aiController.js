@@ -15,9 +15,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.nextInterviewTurn = exports.speakText = exports.transcribeAudioFile = exports.evaluateQuestionAnswer = exports.generateAIQuestion = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const geminiService_1 = require("../services/ai/geminiService");
+const questionService_1 = require("../services/ai/questionService");
 const speechToTextService_1 = require("../services/ai/speechToTextService");
 const textToSpeechService_1 = require("../services/ai/textToSpeechService");
 const interviewController_1 = require("./interviewController");
+const MAX_FOLLOW_UPS = 2; // Maximum follow-ups per main question before advancing
 const QUESTIONS_PER_STAGE = 2;
 function getCurrentStage(questionCount) {
     const stageIndex = Math.min(Math.floor(questionCount / QUESTIONS_PER_STAGE), interviewController_1.INTERVIEW_STAGES.length - 1);
@@ -94,8 +96,14 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
         // 1. Generate question via Gemini
         let generatedContent = '';
         try {
-            const context = `Stage: ${stage}, Category: ${interview.category}, Language: ${interview.language}, Resume: ${resumeSummary}`;
-            generatedContent = yield (0, geminiService_1.generateInterviewQuestion)(context);
+            const generated = yield (0, questionService_1.generateInterviewQuestion)({
+                stage,
+                category: interview.category,
+                language: interview.language,
+                resumeSummary,
+                previousQuestions,
+            });
+            generatedContent = generated.content;
         }
         catch (err) {
             console.warn('Gemini AI failed to generate question, using fallback:', err.message);
@@ -244,7 +252,7 @@ exports.speakText = speakText;
 //   4. Convert it to speech
 //   Returns everything in one response for optimized frontend usage.
 const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const interviewId = req.params.id;
@@ -312,35 +320,74 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         else {
             yield db_1.default.transcript.create({ data: { interviewId, text: transcriptChunk } });
         }
-        // ── 4. Generate next question ─────────────────────────────────────────────
+        // ── 4. Determine follow-up vs new question ────────────────────────────────
         const currentInterview = yield db_1.default.interview.findUnique({
             where: { id: interviewId },
             include: {
                 resume: true,
-                questions: { orderBy: { order: 'asc' } },
+                questions: { orderBy: { order: 'asc' }, include: { answer: true } },
             },
         });
         const totalAsked = currentInterview.questions.length;
         const maxQuestions = interviewController_1.INTERVIEW_STAGES.length * QUESTIONS_PER_STAGE;
+        const resumeSummary = (_d = (_c = currentInterview.resume.parsedData) === null || _c === void 0 ? void 0 : _c.summary) !== null && _d !== void 0 ? _d : `File: ${currentInterview.resume.fileName}`;
         let nextQuestion = null;
         let tts = null;
         let interviewDone = false;
+        let isFollowUp = false;
         if (totalAsked < maxQuestions) {
-            const { stage: nextStage, stageIndex: nextStageIndex } = getCurrentStage(totalAsked);
+            // Read follow-up count from lightweight metadata stored in reportData.followUpMap
+            const reportMeta = (_e = currentInterview.reportData) !== null && _e !== void 0 ? _e : {};
+            const followUpMap = (_f = reportMeta.followUpMap) !== null && _f !== void 0 ? _f : {};
+            const currentFollowUpCount = (_g = followUpMap[questionId]) !== null && _g !== void 0 ? _g : 0;
+            const { stage: nextStage } = getCurrentStage(totalAsked);
             const previousQuestions = currentInterview.questions.map((q) => q.content);
-            const resumeSummary = (_d = (_c = currentInterview.resume.parsedData) === null || _c === void 0 ? void 0 : _c.summary) !== null && _d !== void 0 ? _d : `File: ${currentInterview.resume.fileName}`;
             let generatedContent = '';
-            try {
-                const context = `Stage: ${nextStage}, Category: ${currentInterview.category}, Language: ${currentInterview.language}, Resume: ${resumeSummary}`;
-                generatedContent = yield (0, geminiService_1.generateInterviewQuestion)(context);
+            if (currentFollowUpCount < MAX_FOLLOW_UPS) {
+                // ── Generate follow-up based on the last answer ───────────────────────
+                try {
+                    const followUp = yield (0, questionService_1.generateFollowUpQuestion)({
+                        lastQuestion: question.content,
+                        userAnswer: answerContent,
+                        resumeSummary,
+                        category: currentInterview.category,
+                        language: currentInterview.language,
+                        stage,
+                    });
+                    generatedContent = followUp.content;
+                    isFollowUp = true;
+                    // Persist updated follow-up count
+                    const updatedFollowUpMap = Object.assign(Object.assign({}, followUpMap), { [questionId]: currentFollowUpCount + 1 });
+                    yield db_1.default.interview.update({
+                        where: { id: interviewId },
+                        data: { reportData: Object.assign(Object.assign({}, reportMeta), { followUpMap: updatedFollowUpMap }) },
+                    });
+                }
+                catch (err) {
+                    console.warn('[FollowUp] Follow-up generation failed, advancing to new question:', err.message);
+                    isFollowUp = false;
+                }
             }
-            catch (err) {
-                console.warn('Gemini AI failed to generate question, using fallback:', err.message);
-                const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
-                const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
-                generatedContent = available.length > 0
-                    ? available[Math.floor(Math.random() * available.length)]
-                    : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+            if (!isFollowUp) {
+                // ── Follow-up cap reached — generate fresh main question ─────────────
+                try {
+                    const generated = yield (0, questionService_1.generateInterviewQuestion)({
+                        stage: nextStage,
+                        category: currentInterview.category,
+                        language: currentInterview.language,
+                        resumeSummary,
+                        previousQuestions,
+                    });
+                    generatedContent = generated.content;
+                }
+                catch (err) {
+                    console.warn('[Question] New question generation failed, using fallback:', err.message);
+                    const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
+                    const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
+                    generatedContent = available.length > 0
+                        ? available[Math.floor(Math.random() * available.length)]
+                        : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+                }
             }
             nextQuestion = yield db_1.default.question.create({
                 data: {

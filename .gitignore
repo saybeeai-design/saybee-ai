@@ -7,3 +7,4 @@ coverage
 logs
 .vscode
 .DS_Store
+.codex-tmp-dist/
