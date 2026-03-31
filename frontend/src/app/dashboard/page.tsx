@@ -1,4 +1,6 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+import DashboardWorkspace from '@/components/dashboard/DashboardWorkspace';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/globalStore';
@@ -24,6 +26,10 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function DashboardPage() {
+  return <DashboardWorkspace />;
+}
+
+function LegacyDashboardPage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<Stats>({ interviews: [], resumes: [] });
   const [loading, setLoading] = useState(true);

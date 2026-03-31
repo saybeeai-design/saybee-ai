@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { paymentAPI } from '@/lib/api';
+import type { RazorpayPaymentResponse } from '@/lib/razorpay';
 import { useAuthStore } from '@/store/globalStore';
 import SuccessAnimation from './SuccessAnimation';
 
@@ -93,14 +94,17 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
       const { data } = await paymentAPI.createOrder(planId);
       
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+        key:
+          process.env.NEXT_PUBLIC_RAZORPAY_KEY ||
+          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+          'rzp_test_placeholder',
         amount: data.amount,
         currency: data.currency,
         name: 'SayBee AI',
         description: `Upgrade to ${planId.toUpperCase()}`,
         image: '/logo.png',
         order_id: data.orderId,
-        handler: async (response: any) => {
+        handler: async (response: RazorpayPaymentResponse) => {
           try {
             const verifyRes = await paymentAPI.verify({
               razorpay_order_id: response.razorpay_order_id,
@@ -127,7 +131,11 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         },
       };
 
-      const paymentObject = new (window as any).Razorpay(options);
+      if (!window.Razorpay) {
+        throw new Error('Razorpay SDK unavailable');
+      }
+
+      const paymentObject = new window.Razorpay(options);
       paymentObject.open();
     } catch (err) {
       console.error('Order creation failed', err);

@@ -1,4 +1,6 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect */
+import DashboardShell from '@/components/dashboard/DashboardShell';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
@@ -9,6 +11,10 @@ import { useAuthStore } from '@/store/globalStore';
 import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return <DashboardShell>{children}</DashboardShell>;
+}
+
+function LegacyDashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);

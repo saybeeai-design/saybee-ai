@@ -67,20 +67,39 @@ Sentry.init({
     dsn: process.env.SENTRY_DSN || undefined,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
 });
-const requiredEnvVars = [
-    'DATABASE_URL',
-    'JWT_SECRET',
-    'GEMINI_API_KEY',
-    'GOOGLE_CLIENT_ID',
-    'GOOGLE_CLIENT_SECRET',
-    'RAZORPAY_KEY_ID',
-    'RAZORPAY_KEY_SECRET',
-    'SMTP_USER',
-    'SMTP_PASS',
-];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'GEMINI_API_KEY'];
 for (const envVar of requiredEnvVars) {
     if (!process.env[envVar]) {
         console.error(`Missing required environment variable: ${envVar}`);
+        process.exit(1);
+    }
+}
+const optionalEnvGroups = [
+    {
+        name: 'Google OAuth',
+        keys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+        fallback: 'Google sign-in will use stub credentials until both variables are set.',
+    },
+    {
+        name: 'Razorpay',
+        keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'],
+        fallback: 'Payment routes will run in stub mode until both variables are set.',
+    },
+    {
+        name: 'SMTP',
+        keys: ['SMTP_USER', 'SMTP_PASS'],
+        fallback: 'Email delivery will run in stub mode until both variables are set.',
+    },
+];
+for (const { name, keys, fallback } of optionalEnvGroups) {
+    const configuredKeys = keys.filter((key) => Boolean(process.env[key]));
+    if (configuredKeys.length === 0) {
+        console.warn(`[Config] ${name} is not configured. ${fallback}`);
+        continue;
+    }
+    if (configuredKeys.length !== keys.length) {
+        const missingKeys = keys.filter((key) => !process.env[key]);
+        console.error(`[Config] ${name} is partially configured. Missing: ${missingKeys.join(', ')}`);
         process.exit(1);
     }
 }

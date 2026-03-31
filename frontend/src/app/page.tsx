@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/globalStore';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { getPaymentPlan } from '@/lib/paymentPlans';
 import { 
   Brain, FileText, Zap, Globe, ArrowRight, Play, CheckCircle2, 
   ChevronRight, Star, Quote, Mic, Video, Sparkles
@@ -26,6 +27,9 @@ const staggerContainer = {
 export default function LandingPage() {
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
+  const starterPlan = getPaymentPlan('micro1');
+  const proPlan = getPaymentPlan('pro');
+  const premiumPlan = getPaymentPlan('premium');
 
   useEffect(() => {
     if (isAuthenticated) router.push('/dashboard');
@@ -279,7 +283,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <motion.div {...fadeInUp} className="text-center mb-20">
             <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6">Simple Pricing</h2>
-            <p className="text-gray-400">Choose the plan that fits your career goals.</p>
+            <p className="text-gray-400">
+              Start free, then unlock one-time interview credit packs from {starterPlan.priceLabel}.
+            </p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -319,19 +325,19 @@ export default function LandingPage() {
                 Recommended
               </div>
               <div className="mb-8">
-                <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
+                <h3 className="text-xl font-bold text-white mb-2">{proPlan.name}</h3>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-white">$19</span>
-                  <span className="text-gray-500 text-sm">/ month</span>
+                  <span className="text-4xl font-extrabold text-white">{proPlan.priceLabel}</span>
+                  <span className="text-gray-500 text-sm">/ one-time pack</span>
                 </div>
               </div>
               <ul className="space-y-4 mb-10 flex-1">
                 {[
-                  'Unlimited Interviews', 
-                  'Premium Role Modules', 
-                  'Deep AI Evaluation', 
-                  'Custom Feedback Loops',
-                  'Priority Model Access'
+                  proPlan.creditsLabel,
+                  'Role-based interview practice',
+                  'Deep AI evaluation',
+                  'Detailed feedback reports',
+                  'Use credits anytime after purchase',
                 ].map(f => (
                   <li key={f} className="flex items-center gap-3 text-sm text-gray-300">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -339,9 +345,15 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" className="btn-primary w-full py-4 justify-center">Try Pro Free</Link>
+              <Link href="/signup" className="btn-primary w-full py-4 justify-center">
+                Unlock {proPlan.creditsLabel}
+              </Link>
             </motion.div>
           </div>
+
+          <p className="mt-8 text-center text-sm text-gray-500">
+            Need more volume? The {premiumPlan.name} pack gives you {premiumPlan.creditsLabel.toLowerCase()} for {premiumPlan.priceLabel}.
+          </p>
         </div>
       </section>
 
