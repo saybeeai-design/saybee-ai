@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken } from '../utils/helpers';
-import { sendSignupConfirmation } from '../services/emailService';
+import { sendPasswordReset, sendSignupConfirmation } from '../services/emailService';
 import { User } from '@prisma/client';
+
+const resolveFrontendUrl = (): string => {
+  const configuredFrontendUrl = process.env.FRONTEND_URL?.trim();
+  const firstCorsOrigin = process.env.CORS_ORIGIN?.split(',')[0]?.trim();
+  const fallbackUrl = configuredFrontendUrl || firstCorsOrigin || 'http://localhost:3000';
+
+  return fallbackUrl.replace(/\/+$/, '');
+};
 
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────
 export const signup = async (
@@ -102,24 +110,25 @@ export const googleAuthCallback = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const frontendUrl = resolveFrontendUrl();
     const user = req.user as User;
     if (!user) {
-      res.redirect(`${process.env.FRONTEND_URL}/login?error=Google_Auth_Failed`);
+      res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
       return;
     }
 
     const token = generateToken({ userId: user.id, email: user.email, role: user.role });
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    
+
     // Redirect to frontend auth-callback route with the token
-    res.redirect(`${frontendUrl}/auth-callback?token=${token}`);
+    res.redirect(`${frontendUrl}/auth-callback?token=${encodeURIComponent(token)}`);
   } catch (error) {
     next(error);
   }
 };
 
+export { resolveFrontendUrl };
+
 // ─── POST /api/auth/forgot-password ─────────────────────────────────────────
-import { sendPasswordReset } from '../services/emailService';
 
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -169,4 +178,3 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     next(error);
   }
 };
-

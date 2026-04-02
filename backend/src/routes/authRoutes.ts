@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import passport from 'passport';
-import { signup, login, forgotPassword, resetPassword, googleAuthCallback } from '../controllers/authController';
+import {
+  signup,
+  login,
+  forgotPassword,
+  resetPassword,
+  googleAuthCallback,
+  resolveFrontendUrl,
+} from '../controllers/authController';
 
 const router = Router();
 
@@ -22,7 +29,26 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 // GET /api/auth/google/callback
 router.get(
   '/google/callback',
-  passport.authenticate('google', { session: false }),
+  (req, res, next) => {
+    passport.authenticate('google', { session: false }, (error, user) => {
+      const frontendUrl = resolveFrontendUrl();
+
+      if (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Auth] Google OAuth callback failed: ${message}`);
+        res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
+        return;
+      }
+
+      if (!user) {
+        res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
+        return;
+      }
+
+      req.user = user;
+      next();
+    })(req, res, next);
+  },
   googleAuthCallback
 );
 

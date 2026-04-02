@@ -18,5 +18,21 @@ router.post('/reset-password', authController_1.resetPassword);
 // GET /api/auth/google
 router.get('/google', passport_1.default.authenticate('google', { scope: ['profile', 'email'] }));
 // GET /api/auth/google/callback
-router.get('/google/callback', passport_1.default.authenticate('google', { session: false }), authController_1.googleAuthCallback);
+router.get('/google/callback', (req, res, next) => {
+    passport_1.default.authenticate('google', { session: false }, (error, user) => {
+        const frontendUrl = (0, authController_1.resolveFrontendUrl)();
+        if (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[Auth] Google OAuth callback failed: ${message}`);
+            res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
+            return;
+        }
+        if (!user) {
+            res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
+            return;
+        }
+        req.user = user;
+        next();
+    })(req, res, next);
+}, authController_1.googleAuthCallback);
 exports.default = router;

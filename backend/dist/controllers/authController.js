@@ -12,10 +12,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPassword = exports.forgotPassword = exports.googleAuthCallback = exports.login = exports.signup = void 0;
+exports.resetPassword = exports.forgotPassword = exports.resolveFrontendUrl = exports.googleAuthCallback = exports.login = exports.signup = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const helpers_1 = require("../utils/helpers");
 const emailService_1 = require("../services/emailService");
+const resolveFrontendUrl = () => {
+    var _a, _b, _c;
+    const configuredFrontendUrl = (_a = process.env.FRONTEND_URL) === null || _a === void 0 ? void 0 : _a.trim();
+    const firstCorsOrigin = (_c = (_b = process.env.CORS_ORIGIN) === null || _b === void 0 ? void 0 : _b.split(',')[0]) === null || _c === void 0 ? void 0 : _c.trim();
+    const fallbackUrl = configuredFrontendUrl || firstCorsOrigin || 'http://localhost:3000';
+    return fallbackUrl.replace(/\/+$/, '');
+};
+exports.resolveFrontendUrl = resolveFrontendUrl;
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────
 const signup = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -91,15 +99,15 @@ exports.login = login;
 // ─── GET /api/auth/google/callback ────────────────────────────────────────────
 const googleAuthCallback = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const frontendUrl = resolveFrontendUrl();
         const user = req.user;
         if (!user) {
-            res.redirect(`${process.env.FRONTEND_URL}/login?error=Google_Auth_Failed`);
+            res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
             return;
         }
         const token = (0, helpers_1.generateToken)({ userId: user.id, email: user.email, role: user.role });
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
         // Redirect to frontend auth-callback route with the token
-        res.redirect(`${frontendUrl}/auth-callback?token=${token}`);
+        res.redirect(`${frontendUrl}/auth-callback?token=${encodeURIComponent(token)}`);
     }
     catch (error) {
         next(error);
@@ -107,7 +115,6 @@ const googleAuthCallback = (req, res, next) => __awaiter(void 0, void 0, void 0,
 });
 exports.googleAuthCallback = googleAuthCallback;
 // ─── POST /api/auth/forgot-password ─────────────────────────────────────────
-const emailService_2 = require("../services/emailService");
 const forgotPassword = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { email } = req.body;
@@ -124,7 +131,7 @@ const forgotPassword = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         // In a real app, you would create a token in the DB and attach it to the email.
         // For this stub, we just simulate the flow.
         const resetToken = `stub_reset_${Date.now()}`;
-        yield (0, emailService_2.sendPasswordReset)(user.email, resetToken).catch(err => console.error(err));
+        yield (0, emailService_1.sendPasswordReset)(user.email, resetToken).catch(err => console.error(err));
         res.status(200).json({ message: 'If an account exists, a reset link has been sent' });
     }
     catch (error) {
