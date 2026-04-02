@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
-import DashboardWorkspace from '@/components/dashboard/DashboardWorkspace';
+import PremiumDashboardWorkspace from '@/components/dashboard/PremiumDashboardWorkspace';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/globalStore';
@@ -26,7 +26,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function DashboardPage() {
-  return <DashboardWorkspace />;
+  return <PremiumDashboardWorkspace />;
 }
 
 function LegacyDashboardPage() {

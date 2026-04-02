@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
-import ChatWorkspace from '@/components/dashboard/ChatWorkspace';
+import PremiumChatWorkspace from '@/components/dashboard/PremiumChatWorkspace';
 import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, User, Loader2, MessageSquare, Trash2, Paperclip, Sparkles, Copy, Check, ArrowUp, Volume2, VolumeX, RefreshCcw } from 'lucide-react';
@@ -18,7 +18,7 @@ interface Message {
 }
 
 export default function ChatPage() {
-  return <ChatWorkspace />;
+  return <PremiumChatWorkspace />;
 }
 
 function LegacyChatPage() {

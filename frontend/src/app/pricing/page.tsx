@@ -1,7 +1,7 @@
 'use client';
 
-import PricingWorkspace from '@/components/pricing/PricingWorkspace';
+import PremiumPricingWorkspace from '@/components/pricing/PremiumPricingWorkspace';
 
 export default function PricingPage() {
-  return <PricingWorkspace />;
+  return <PremiumPricingWorkspace />;
 }

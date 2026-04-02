@@ -1,19 +1,10 @@
-'use client';
-/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect */
 import DashboardShell from '@/components/dashboard/DashboardShell';
-import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { Menu } from 'lucide-react';
-import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
-import Sidebar from '@/components/layout/Sidebar';
-import { useAuthStore } from '@/store/globalStore';
-import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return <DashboardShell>{children}</DashboardShell>;
 }
 
+/*
 function LegacyDashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,7 +30,7 @@ function LegacyDashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-300">
-      {/* Mobile Backdrop */}
+      Mobile Backdrop
       <AnimatePresence>
         {isMobile && sidebarOpen && (
           <motion.div
@@ -60,9 +51,9 @@ function LegacyDashboardLayout({ children }: { children: React.ReactNode }) {
         toggleCollapse={() => setIsCollapsed(!isCollapsed)}
       />
 
-      {/* Main Content Area */}
+      Main Content Area
       <div className="flex-1 flex flex-col min-w-0 relative h-screen overflow-hidden">
-        {/* Mobile Header */}
+        Mobile Header
         <header className="lg:hidden flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-[#0f172a]/90 backdrop-blur-lg sticky top-0 z-30 transition-colors duration-300">
           <button 
             onClick={() => setSidebarOpen(true)}
@@ -109,3 +100,4 @@ function LegacyDashboardLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+*/
