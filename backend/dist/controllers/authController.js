@@ -20,8 +20,12 @@ const resolveFrontendUrl = () => {
     var _a, _b, _c;
     const configuredFrontendUrl = (_a = process.env.FRONTEND_URL) === null || _a === void 0 ? void 0 : _a.trim();
     const firstCorsOrigin = (_c = (_b = process.env.CORS_ORIGIN) === null || _b === void 0 ? void 0 : _b.split(',')[0]) === null || _c === void 0 ? void 0 : _c.trim();
-    const fallbackUrl = configuredFrontendUrl || firstCorsOrigin || 'http://localhost:3000';
-    return fallbackUrl.replace(/\/+$/, '');
+    const candidates = [configuredFrontendUrl, firstCorsOrigin, 'http://localhost:3000'].filter((value) => Boolean(value));
+    const isLocalUrl = (value) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value);
+    const preferredUrl = process.env.NODE_ENV === 'production'
+        ? candidates.find((value) => !isLocalUrl(value)) || candidates[0]
+        : candidates[0];
+    return preferredUrl.replace(/\/+$/, '');
 };
 exports.resolveFrontendUrl = resolveFrontendUrl;
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────

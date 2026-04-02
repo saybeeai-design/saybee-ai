@@ -7,9 +7,19 @@ import { User } from '@prisma/client';
 const resolveFrontendUrl = (): string => {
   const configuredFrontendUrl = process.env.FRONTEND_URL?.trim();
   const firstCorsOrigin = process.env.CORS_ORIGIN?.split(',')[0]?.trim();
-  const fallbackUrl = configuredFrontendUrl || firstCorsOrigin || 'http://localhost:3000';
+  const candidates = [configuredFrontendUrl, firstCorsOrigin, 'http://localhost:3000'].filter(
+    (value): value is string => Boolean(value)
+  );
 
-  return fallbackUrl.replace(/\/+$/, '');
+  const isLocalUrl = (value: string): boolean =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value);
+
+  const preferredUrl =
+    process.env.NODE_ENV === 'production'
+      ? candidates.find((value) => !isLocalUrl(value)) || candidates[0]
+      : candidates[0];
+
+  return preferredUrl.replace(/\/+$/, '');
 };
 
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────
