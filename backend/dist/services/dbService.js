@@ -47,6 +47,7 @@ exports.shutdownDatabase = exports.getDatabaseStatus = exports.ensureDatabaseCon
 const db_1 = __importStar(require("../config/db"));
 const databaseErrors_1 = require("../utils/databaseErrors");
 Object.defineProperty(exports, "isRecoverableDatabaseError", { enumerable: true, get: function () { return databaseErrors_1.isRecoverableDatabaseError; } });
+const schemaCompatibilityService_1 = require("./schemaCompatibilityService");
 const STARTUP_RETRIES = Number((_a = process.env.DB_CONNECT_MAX_RETRIES) !== null && _a !== void 0 ? _a : 5);
 const STARTUP_RETRY_DELAY_MS = Number((_b = process.env.DB_CONNECT_RETRY_DELAY_MS) !== null && _b !== void 0 ? _b : 5000);
 const REQUEST_RETRIES = Number((_c = process.env.DB_REQUEST_RECONNECT_RETRIES) !== null && _c !== void 0 ? _c : 1);
@@ -95,6 +96,7 @@ const connectToDatabase = (...args_1) => __awaiter(void 0, [...args_1], void 0, 
             try {
                 yield (0, db_1.reconnectPrismaClient)(reason);
                 yield pingDatabase();
+                yield (0, schemaCompatibilityService_1.ensureDatabaseSchemaCompatibility)(reason);
                 console.log(`[DB] Connection ready (${reason})`);
                 return;
             }

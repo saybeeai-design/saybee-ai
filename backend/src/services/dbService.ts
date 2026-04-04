@@ -5,6 +5,7 @@ import {
   getDatabaseErrorMessage,
   isRecoverableDatabaseError,
 } from '../utils/databaseErrors';
+import { ensureDatabaseSchemaCompatibility } from './schemaCompatibilityService';
 
 type DatabaseState = 'idle' | 'connecting' | 'ready' | 'degraded' | 'shutting_down';
 
@@ -83,6 +84,7 @@ export const connectToDatabase = async (options: ConnectOptions = {}): Promise<v
       try {
         await reconnectPrismaClient(reason);
         await pingDatabase();
+        await ensureDatabaseSchemaCompatibility(reason);
         console.log(`[DB] Connection ready (${reason})`);
         return;
       } catch (error) {
