@@ -25,7 +25,7 @@ export const navigationItems: NavigationItem[] = [
 
 export interface PageMeta {
   title: string;
-  subtitle: string;
+  subtitle?: string;
 }
 
 export function getPageMeta(pathname: string): PageMeta {
@@ -38,8 +38,7 @@ export function getPageMeta(pathname: string): PageMeta {
 
   if (pathname.startsWith('/dashboard/chat')) {
     return {
-      title: 'AI Copilot',
-      subtitle: 'A focused chat workspace for interview prep and answer coaching.',
+      title: 'AI Assistant',
     };
   }
 

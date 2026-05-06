@@ -25,6 +25,7 @@ export default function Navbar({ onOpenSidebar }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const pageMeta = getPageMeta(pathname);
+  const isMinimalHeader = pathname.startsWith('/dashboard/chat');
 
   const initials = useMemo(() => {
     const name = user?.name?.trim();
@@ -65,11 +66,15 @@ export default function Navbar({ onOpenSidebar }: NavbarProps) {
           </button>
 
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#6B7280]">
-              Workspace
-            </p>
+            {!isMinimalHeader && (
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#6B7280]">
+                Workspace
+              </p>
+            )}
             <h1 className="truncate text-lg font-semibold text-white sm:text-xl">{pageMeta.title}</h1>
-            <p className="hidden truncate text-sm text-[#9CA3AF] md:block">{pageMeta.subtitle}</p>
+            {pageMeta.subtitle ? (
+              <p className="hidden truncate text-sm text-[#9CA3AF] md:block">{pageMeta.subtitle}</p>
+            ) : null}
           </div>
         </div>
 
