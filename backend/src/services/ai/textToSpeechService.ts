@@ -71,8 +71,11 @@ export const LANGUAGE_CODES: Record<string, string> = {
   English: 'en-US',
   Hindi: 'hi-IN',
   Assamese: 'as-IN',
-  Tamil: 'ta-IN',
   Bengali: 'bn-IN',
+  Tamil: 'ta-IN',
+  Telugu: 'te-IN',
+  Marathi: 'mr-IN',
+  Gujarati: 'gu-IN',
 };
 
 export function getLanguageCode(languageName: string): string {

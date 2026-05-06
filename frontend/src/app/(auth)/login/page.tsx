@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { authAPI } from '@/lib/api';
+import { getBackendBaseUrl } from '@/lib/backendUrl';
 import { useAuthStore } from '@/store/globalStore';
 
 export default function LoginPage() {
@@ -35,7 +36,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    const backendUrl = getBackendBaseUrl();
     window.location.href = `${backendUrl}/api/auth/google`;
   };
 

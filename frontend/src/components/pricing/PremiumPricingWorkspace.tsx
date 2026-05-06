@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Check, ChevronLeft, CreditCard, ShieldCheck, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { paymentAPI } from '@/lib/api';
+import { getPaymentErrorMessage } from '@/lib/paymentErrors';
 import { PAYMENT_PLANS } from '@/lib/paymentPlans';
 import { openRazorpayCheckout } from '@/lib/razorpay';
 import { useAuthStore } from '@/store/globalStore';
@@ -46,12 +47,17 @@ export default function PremiumPricingWorkspace() {
     try {
       const { data } = await paymentAPI.createOrder(planId);
 
+      if (data.stub) {
+        throw new Error('Payments are still in stub mode on the server. Restart the backend after updating Razorpay credentials.');
+      }
+
       await openRazorpayCheckout({
         amount: data.amount,
         currency: data.currency,
         orderId: data.orderId,
         name: 'SayBee AI',
         description: `Upgrade to ${planId.toUpperCase()}`,
+        key: data.keyId,
         email: user.email,
         onSuccess: async (response) => {
           try {
@@ -74,8 +80,9 @@ export default function PremiumPricingWorkspace() {
           }
         },
       });
-    } catch {
-      toast.error('Failed to initiate checkout. Please try again.');
+    } catch (error) {
+      console.error('Checkout initialization failed', error);
+      toast.error(getPaymentErrorMessage(error));
     } finally {
       setLoading(null);
     }

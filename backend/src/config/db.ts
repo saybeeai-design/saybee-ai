@@ -1,8 +1,10 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
+  getDatabaseErrorCode,
   getDatabaseErrorMessage,
   isRecoverableDatabaseError,
+  isSchemaMismatchDatabaseError,
 } from '../utils/databaseErrors';
 
 const PRISMA_QUERY_RETRIES = Number(process.env.DB_QUERY_RETRY_COUNT ?? 1);
@@ -87,19 +89,40 @@ const createPrismaClient = (): PrismaClient => {
     ],
   });
 
+  client.$on('warn', (event: Prisma.LogEvent) => {
+    console.warn(`[Prisma] Warning${event.target ? ` (${event.target})` : ''}: ${event.message}`);
+  });
+
+  client.$on('error', (event: Prisma.LogEvent) => {
+    console.error(`[Prisma] Error${event.target ? ` (${event.target})` : ''}: ${event.message}`);
+  });
+
   client.$use(async (params, next) => {
     let attempt = 0;
+    const operationName = `${params.model ?? 'raw'}.${params.action}`;
 
     while (true) {
       try {
         return await next(params);
       } catch (error) {
+        const errorMessage = getDatabaseErrorMessage(error);
+        const errorCode = getDatabaseErrorCode(error);
+
         if (!isRecoverableDatabaseError(error) || attempt >= PRISMA_QUERY_RETRIES) {
+          const details = `${errorCode ? `${errorCode}: ` : ''}${errorMessage}`;
+
+          if (isSchemaMismatchDatabaseError(error)) {
+            console.error(
+              `[DB] Schema mismatch during ${operationName}. ${details}. The deployed database is behind the Prisma schema. Run "npx prisma db push" during deployment.`
+            );
+          } else {
+            console.error(`[DB] Query failed during ${operationName}. ${details}`);
+          }
+
           throw error;
         }
 
         attempt += 1;
-        const operationName = `${params.model ?? 'raw'}.${params.action}`;
 
         console.warn(
           `[DB] Transient database error on ${operationName}. Retrying (${attempt}/${PRISMA_QUERY_RETRIES})...`

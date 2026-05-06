@@ -1,4 +1,4 @@
-import { getGeminiModel } from './geminiClient';
+import { generateGeminiText } from './geminiClient';
 
 export interface EvaluateAnswerInput {
   question: string;
@@ -46,9 +46,9 @@ The JSON must follow this exact structure:
   "summary": "<2-3 sentence overall assessment>"
 }`;
 
-  const model = getGeminiModel();
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
+  const raw = await generateGeminiText(prompt, {
+    label: `evaluateAnswer (${stage})`,
+  });
 
   // Strip markdown code fences if Gemini includes them
   const cleaned = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
@@ -115,11 +115,10 @@ The JSON must follow this exact structure:
   "overallSummary": "<1 paragraph detailed summary of their performance>"
 }`;
 
-  const model = getGeminiModel();
-  
   try {
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
+    const raw = await generateGeminiText(prompt, {
+      label: 'generateFinalReport',
+    });
     const cleaned = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
     
     const parsed = JSON.parse(cleaned) as FinalReportResult;

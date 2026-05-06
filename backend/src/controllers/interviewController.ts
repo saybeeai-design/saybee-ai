@@ -3,7 +3,8 @@ import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { sendInterviewReport } from '../services/emailService';
 import { generateFinalReport } from '../services/ai/evaluationService';
-import { generateInterviewQuestion } from '../services/ai/geminiService';
+import { extractResumeContext, normalizeInterviewConfig } from '../services/ai/promptBuilder';
+import { buildQuestionFallback, generateInterviewQuestion } from '../services/ai/questionService';
 
 // Interview stages in order
 export const INTERVIEW_STAGES = [
@@ -15,6 +16,18 @@ export const INTERVIEW_STAGES = [
 ] as const;
 
 export type InterviewStage = typeof INTERVIEW_STAGES[number];
+
+function safeParseEvaluation(value: unknown) {
+  if (typeof value !== 'string') {
+    return value ?? null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 // ─── POST /api/interviews/start ───────────────────────────────────────────────
 export const startInterview = async (
@@ -29,10 +42,23 @@ export const startInterview = async (
       return;
     }
 
-    const { resumeId, category, language } = req.body;
+    const resumeId =
+      typeof req.body.resume === 'string' && req.body.resume.trim()
+        ? req.body.resume.trim()
+        : typeof req.body.resumeId === 'string'
+          ? req.body.resumeId.trim()
+          : '';
+    const interviewConfig = normalizeInterviewConfig({
+      category: typeof req.body.category === 'string' ? req.body.category.trim() : '',
+      customRole: typeof req.body.customRole === 'string' ? req.body.customRole.trim() : '',
+      language: typeof req.body.language === 'string' ? req.body.language.trim() : '',
+      role: typeof req.body.role === 'string' ? req.body.role.trim() : '',
+      subRole: typeof req.body.subRole === 'string' ? req.body.subRole.trim() : '',
+    });
+    const category = interviewConfig.category;
 
     if (!resumeId || !category) {
-      res.status(400).json({ message: 'resumeId and category are required' });
+      res.status(400).json({ message: 'resume/category information is required' });
       return;
     }
 
@@ -59,7 +85,10 @@ export const startInterview = async (
         userId,
         resumeId,
         category,
-        language: language || 'English',
+        language: interviewConfig.language,
+        reportData: {
+          interviewConfig,
+        } as any,
         status: 'IN_PROGRESS',
         // Store current stage in a JSON metadata field — we use the existing
         // data model's JSON-compatible approach via the score field being nullable
@@ -78,13 +107,27 @@ export const startInterview = async (
     });
 
     // Generate the first question immediately
-    const resumeContext = (resume.parsedData as any)?.summary || `Candidate applying for ${category}`;
-    const firstQuestionContent = await generateInterviewQuestion(resumeContext);
+    const resumeContext = extractResumeContext(resume.parsedData, resume.fileName, category);
+    let firstQuestionMeta = buildQuestionFallback({
+      interviewConfig,
+      stage: INTERVIEW_STAGES[0],
+    });
+
+    try {
+      firstQuestionMeta = await generateInterviewQuestion({
+        interviewConfig,
+        previousQuestions: [],
+        resumeSummary: resumeContext,
+        stage: INTERVIEW_STAGES[0],
+      });
+    } catch (error) {
+      console.error('[Interview Start] Failed to generate the first AI question, using fallback:', error);
+    }
 
     const firstQuestion = await prisma.question.create({
       data: {
         interviewId: interview.id,
-        content: firstQuestionContent,
+        content: firstQuestionMeta.question,
         order: 1,
       },
     });
@@ -96,6 +139,7 @@ export const startInterview = async (
         currentStage: INTERVIEW_STAGES[0],
         totalStages: INTERVIEW_STAGES.length,
         firstQuestion,
+        firstQuestionMeta,
       },
     });
   } catch (error) {
@@ -143,7 +187,7 @@ export const getInterview = async (
         ...q,
         answer: q.answer ? {
           ...q.answer,
-          evaluation: q.answer.evaluation ? JSON.parse(q.answer.evaluation as any) : null
+          evaluation: safeParseEvaluation(q.answer.evaluation)
         } : null
       }))
     };
@@ -233,7 +277,7 @@ export const finishInterview = async (
     const transcriptText = interview.questions
       .map((q, idx) => {
         const ans = q.answer?.content ?? '(No answer)';
-        const evaluation = q.answer?.evaluation ? JSON.parse(q.answer.evaluation as any) : null;
+        const evaluation = safeParseEvaluation(q.answer?.evaluation);
         return `Q${idx + 1} [${q.content}]\nA: ${ans}\nEvaluation: ${JSON.stringify(evaluation)}`;
       })
       .join('\n\n');

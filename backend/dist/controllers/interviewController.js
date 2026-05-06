@@ -16,6 +16,7 @@ exports.finishInterview = exports.listInterviews = exports.getInterview = export
 const db_1 = __importDefault(require("../config/db"));
 const emailService_1 = require("../services/emailService");
 const evaluationService_1 = require("../services/ai/evaluationService");
+const geminiClient_1 = require("../services/ai/geminiClient");
 const geminiService_1 = require("../services/ai/geminiService");
 // Interview stages in order
 exports.INTERVIEW_STAGES = [
@@ -25,6 +26,7 @@ exports.INTERVIEW_STAGES = [
     'HR',
     'Closing',
 ];
+const FIRST_QUESTION_FALLBACK = geminiClient_1.GEMINI_FALLBACK_RESPONSE.data.message;
 // ─── POST /api/interviews/start ───────────────────────────────────────────────
 const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -78,7 +80,13 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         });
         // Generate the first question immediately
         const resumeContext = ((_b = resume.parsedData) === null || _b === void 0 ? void 0 : _b.summary) || `Candidate applying for ${category}`;
-        const firstQuestionContent = yield (0, geminiService_1.generateInterviewQuestion)(resumeContext);
+        let firstQuestionContent = FIRST_QUESTION_FALLBACK;
+        try {
+            firstQuestionContent = yield (0, geminiService_1.generateInterviewQuestion)(resumeContext);
+        }
+        catch (error) {
+            console.error('[Interview Start] Failed to generate the first AI question, using fallback:', error);
+        }
         const firstQuestion = yield db_1.default.question.create({
             data: {
                 interviewId: interview.id,

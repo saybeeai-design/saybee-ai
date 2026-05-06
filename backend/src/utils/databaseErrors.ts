@@ -7,6 +7,8 @@ const RECOVERABLE_DATABASE_CODES = new Set([
   'P1017',
 ]);
 
+const SCHEMA_MISMATCH_DATABASE_CODES = new Set(['P2022']);
+
 const RECOVERABLE_DATABASE_MESSAGES = [
   'terminating connection due to administrator command',
   'server has closed the connection',
@@ -16,6 +18,11 @@ const RECOVERABLE_DATABASE_MESSAGES = [
   "can't reach database server",
   'the database server closed the connection',
   'connection terminated unexpectedly',
+];
+
+const SCHEMA_MISMATCH_DATABASE_MESSAGES = [
+  'does not exist in the current database',
+  'database schema',
 ];
 
 export type DatabaseErrorInfo = {
@@ -69,6 +76,17 @@ export const isRecoverableDatabaseError = (error: unknown): boolean => {
   const errorText = getDatabaseErrorText(error);
 
   return RECOVERABLE_DATABASE_MESSAGES.some((token) => errorText.includes(token));
+};
+
+export const isSchemaMismatchDatabaseError = (error: unknown): boolean => {
+  const code = getDatabaseErrorCode(error);
+  if (code && SCHEMA_MISMATCH_DATABASE_CODES.has(code.toUpperCase())) {
+    return true;
+  }
+
+  const errorText = getDatabaseErrorText(error);
+
+  return SCHEMA_MISMATCH_DATABASE_MESSAGES.some((token) => errorText.includes(token));
 };
 
 export const createDatabaseErrorInfo = (error: unknown): DatabaseErrorInfo => ({

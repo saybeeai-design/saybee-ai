@@ -3,27 +3,42 @@ import { Server } from 'http';
 import app from './app';
 import {
   connectToDatabase,
+  getDatabaseStatus,
   reconnectDatabaseInBackground,
   shutdownDatabase,
 } from './services/dbService';
+import { getDatabaseErrorMessage } from './utils/databaseErrors';
 
 const PORT = process.env.PORT || 5000;
 let server: Server | null = null;
 
-function startServer(): void {
+const logDatabaseStartupStatus = (): void => {
+  const status = getDatabaseStatus();
+  const lastError = status.lastError?.message ? ` | lastError=${status.lastError.message}` : '';
+
+  console.log(`[DB] Startup status: state=${status.state}, connected=${status.connected}${lastError}`);
+};
+
+async function startServer(): Promise<void> {
+  console.log('[Server] Starting SayBee AI backend...');
+
+  try {
+    console.log('[DB] Verifying Prisma connection before accepting traffic...');
+    await connectToDatabase({ reason: 'startup' });
+    console.log('Database connected via Prisma');
+  } catch (error) {
+    console.error(
+      `[DB] Startup connection failed. Continuing in degraded mode: ${getDatabaseErrorMessage(error)}`
+    );
+    reconnectDatabaseInBackground('startup recovery');
+  }
+
+  logDatabaseStartupStatus();
+
   server = app.listen(PORT, () => {
     console.log(`SayBee AI Backend running on http://localhost:${PORT}`);
     console.log(`Health check: http://localhost:${PORT}/api/health`);
   });
-
-  void connectToDatabase({ reason: 'startup' })
-    .then(() => {
-      console.log('Database connected via Prisma');
-    })
-    .catch((error) => {
-      console.error('Database startup connection failed. Continuing in degraded mode:', error);
-      reconnectDatabaseInBackground('startup recovery');
-    });
 }
 
 const shutdownServer = async (signal: string): Promise<void> => {
@@ -54,4 +69,7 @@ process.on('SIGTERM', () => {
   void shutdownServer('SIGTERM');
 });
 
-startServer();
+void startServer().catch((error) => {
+  console.error(`[Server] Failed to start: ${getDatabaseErrorMessage(error)}`);
+  process.exit(1);
+});

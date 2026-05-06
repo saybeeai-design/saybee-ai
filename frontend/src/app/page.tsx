@@ -299,7 +299,7 @@ export default function LandingPage() {
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-white mb-2">Free</h3>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-white">$0</span>
+                  <span className="text-4xl font-extrabold text-white">₹0</span>
                   <span className="text-gray-500 text-sm">/ month</span>
                 </div>
               </div>

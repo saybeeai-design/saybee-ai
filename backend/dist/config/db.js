@@ -79,19 +79,34 @@ const createPrismaClient = () => {
             { emit: 'event', level: 'error' },
         ],
     });
+    client.$on('warn', (event) => {
+        console.warn(`[Prisma] Warning${event.target ? ` (${event.target})` : ''}: ${event.message}`);
+    });
+    client.$on('error', (event) => {
+        console.error(`[Prisma] Error${event.target ? ` (${event.target})` : ''}: ${event.message}`);
+    });
     client.$use((params, next) => __awaiter(void 0, void 0, void 0, function* () {
         var _a;
         let attempt = 0;
+        const operationName = `${(_a = params.model) !== null && _a !== void 0 ? _a : 'raw'}.${params.action}`;
         while (true) {
             try {
                 return yield next(params);
             }
             catch (error) {
+                const errorMessage = (0, databaseErrors_1.getDatabaseErrorMessage)(error);
+                const errorCode = (0, databaseErrors_1.getDatabaseErrorCode)(error);
                 if (!(0, databaseErrors_1.isRecoverableDatabaseError)(error) || attempt >= PRISMA_QUERY_RETRIES) {
+                    const details = `${errorCode ? `${errorCode}: ` : ''}${errorMessage}`;
+                    if ((0, databaseErrors_1.isSchemaMismatchDatabaseError)(error)) {
+                        console.error(`[DB] Schema mismatch during ${operationName}. ${details}. The deployed database is behind the Prisma schema. Run "npx prisma db push" during deployment.`);
+                    }
+                    else {
+                        console.error(`[DB] Query failed during ${operationName}. ${details}`);
+                    }
                     throw error;
                 }
                 attempt += 1;
-                const operationName = `${(_a = params.model) !== null && _a !== void 0 ? _a : 'raw'}.${params.action}`;
                 console.warn(`[DB] Transient database error on ${operationName}. Retrying (${attempt}/${PRISMA_QUERY_RETRIES})...`);
                 try {
                     yield (0, exports.reconnectPrismaClient)(`query retry: ${operationName}`);

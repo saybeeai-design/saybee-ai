@@ -32,6 +32,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response, next
         amount: planConfig.amount,
         currency: planConfig.currency,
         plan,
+        keyId: process.env.RAZORPAY_KEY_ID || null,
         stub: true,
       });
       return;
@@ -49,6 +50,8 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response, next
       amount: order.amount,
       currency: order.currency,
       plan,
+      keyId: process.env.RAZORPAY_KEY_ID || null,
+      stub: false,
     });
   } catch (error) {
     next(error);

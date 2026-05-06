@@ -106,7 +106,7 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
             generatedContent = generated.content;
         }
         catch (err) {
-            console.warn('Gemini AI failed to generate question, using fallback:', err.message);
+            console.error('Gemini AI failed to generate question, using fallback:', err);
             const stageQuestions = PLACEHOLDER_QUESTIONS[stage] || PLACEHOLDER_QUESTIONS.Introduction;
             const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
             generatedContent = available.length > 0
@@ -181,7 +181,7 @@ const evaluateQuestionAnswer = (req, res, next) => __awaiter(void 0, void 0, voi
             feedback = yield (0, geminiService_1.evaluateAnswer)(question.content, question.answer.content);
         }
         catch (err) {
-            console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
+            console.error('Gemini AI failed to evaluate answer, using fallback:', err);
             feedback = "AI evaluation unavailable right now.";
         }
         // Update the answer with AI evaluation
@@ -297,7 +297,7 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             feedback = yield (0, geminiService_1.evaluateAnswer)(question.content, answerContent);
         }
         catch (err) {
-            console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
+            console.error('Gemini AI failed to evaluate answer, using fallback:', err);
             feedback = "AI evaluation unavailable right now.";
         }
         // Persist evaluation
@@ -364,7 +364,7 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
                     });
                 }
                 catch (err) {
-                    console.warn('[FollowUp] Follow-up generation failed, advancing to new question:', err.message);
+                    console.error('[FollowUp] Follow-up generation failed, advancing to new question:', err);
                     isFollowUp = false;
                 }
             }
@@ -381,7 +381,7 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
                     generatedContent = generated.content;
                 }
                 catch (err) {
-                    console.warn('[Question] New question generation failed, using fallback:', err.message);
+                    console.error('[Question] New question generation failed, using fallback:', err);
                     const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
                     const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
                     generatedContent = available.length > 0

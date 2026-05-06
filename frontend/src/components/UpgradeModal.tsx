@@ -12,6 +12,8 @@ import {
   Loader2
 } from 'lucide-react';
 import { paymentAPI } from '@/lib/api';
+import { getPaymentErrorMessage } from '@/lib/paymentErrors';
+import { openRazorpayCheckout } from '@/lib/razorpay';
 import type { RazorpayPaymentResponse } from '@/lib/razorpay';
 import { useAuthStore } from '@/store/globalStore';
 import SuccessAnimation from './SuccessAnimation';
@@ -70,41 +72,24 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-
-  const loadRazorpay = () => {
-    return new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
   const handlePayment = async (planId: string) => {
     setLoadingPlan(planId);
     try {
-      const res = await loadRazorpay();
-      if (!res) {
-        alert('Razorpay SDK failed to load. Check your internet connection.');
-        setLoadingPlan(null);
-        return;
+      const { data } = await paymentAPI.createOrder(planId);
+
+      if (data.stub) {
+        throw new Error('Payments are still in stub mode on the server. Restart the backend after updating Razorpay credentials.');
       }
 
-      const { data } = await paymentAPI.createOrder(planId);
-      
-      const options = {
-        key:
-          process.env.NEXT_PUBLIC_RAZORPAY_KEY ||
-          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-          'rzp_test_placeholder',
+      await openRazorpayCheckout({
         amount: data.amount,
         currency: data.currency,
+        orderId: data.orderId,
+        key: data.keyId,
         name: 'SayBee AI',
         description: `Upgrade to ${planId.toUpperCase()}`,
-        image: '/logo.png',
-        order_id: data.orderId,
-        handler: async (response: RazorpayPaymentResponse) => {
+        email: user?.email,
+        onSuccess: async (response: RazorpayPaymentResponse) => {
           try {
             const verifyRes = await paymentAPI.verify({
               razorpay_order_id: response.razorpay_order_id,
@@ -122,24 +107,10 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             alert('Payment verification failed.');
           }
         },
-        prefill: {
-          name: user?.name || '',
-          email: user?.email || '',
-        },
-        theme: {
-          color: '#3b82f6',
-        },
-      };
-
-      if (!window.Razorpay) {
-        throw new Error('Razorpay SDK unavailable');
-      }
-
-      const paymentObject = new window.Razorpay(options);
-      paymentObject.open();
+      });
     } catch (err) {
       console.error('Order creation failed', err);
-      alert('Could not initiate payment.');
+      alert(getPaymentErrorMessage(err, 'Could not initiate payment.'));
     } finally {
       setLoadingPlan(null);
     }

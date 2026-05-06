@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const passport_1 = __importDefault(require("passport"));
 const authController_1 = require("../controllers/authController");
+const databaseErrors_1 = require("../utils/databaseErrors");
 const router = (0, express_1.Router)();
 // POST /api/auth/signup
 router.post('/signup', authController_1.signup);
@@ -22,8 +23,13 @@ router.get('/google/callback', (req, res, next) => {
     passport_1.default.authenticate('google', { session: false }, (error, user) => {
         const frontendUrl = (0, authController_1.resolveFrontendUrl)();
         if (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error(`[Auth] Google OAuth callback failed: ${message}`);
+            const message = (0, databaseErrors_1.getDatabaseErrorMessage)(error);
+            if ((0, databaseErrors_1.isSchemaMismatchDatabaseError)(error)) {
+                console.error(`[Auth] Google OAuth callback blocked by database schema mismatch: ${message}. Render must run "npx prisma db push" against the production database.`);
+            }
+            else {
+                console.error(`[Auth] Google OAuth callback failed: ${message}`);
+            }
             res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
             return;
         }

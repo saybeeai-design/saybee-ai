@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notFound = exports.errorHandler = void 0;
 const dbService_1 = require("../services/dbService");
+const databaseErrors_1 = require("../utils/databaseErrors");
 const isProduction = process.env.NODE_ENV === 'production';
 const errorHandler = (err, _req, res, next) => {
     var _a;
@@ -15,6 +16,15 @@ const errorHandler = (err, _req, res, next) => {
         res.status(503).json({
             code: 'DATABASE_UNAVAILABLE',
             message: 'Database connection was interrupted. Please retry in a few seconds.',
+        });
+        return;
+    }
+    if ((0, databaseErrors_1.isSchemaMismatchDatabaseError)(err)) {
+        (0, dbService_1.markDatabaseUnhealthy)(err);
+        console.error(`[DB] Schema mismatch detected: ${(0, databaseErrors_1.getDatabaseErrorMessage)(err)}`);
+        res.status(503).json({
+            code: 'DATABASE_SCHEMA_MISMATCH',
+            message: 'Database schema is out of date for the current backend release. Apply Prisma schema changes and retry.',
         });
         return;
     }

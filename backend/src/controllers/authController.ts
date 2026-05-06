@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken } from '../utils/helpers';
 import { sendPasswordReset, sendSignupConfirmation } from '../services/emailService';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 
 const resolveFrontendUrl = (): string => {
   const configuredFrontendUrl = process.env.FRONTEND_URL?.trim();
@@ -21,6 +21,23 @@ const resolveFrontendUrl = (): string => {
 
   return preferredUrl.replace(/\/+$/, '');
 };
+
+const signupLookupSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+});
+
+const loginUserSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
+  name: true,
+  email: true,
+  password: true,
+  role: true,
+  createdAt: true,
+});
+
+const forgotPasswordUserSelect = Prisma.validator<Prisma.UserSelect>()({
+  email: true,
+});
 
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────
 export const signup = async (
@@ -41,7 +58,10 @@ export const signup = async (
       return;
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: signupLookupSelect,
+    });
     if (existingUser) {
       res.status(409).json({ message: 'A user with this email already exists' });
       return;
@@ -83,7 +103,10 @@ export const login = async (
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: loginUserSelect,
+    });
     if (!user) {
       res.status(401).json({ message: 'Invalid email or password' });
       return;
@@ -121,7 +144,7 @@ export const googleAuthCallback = async (
 ): Promise<void> => {
   try {
     const frontendUrl = resolveFrontendUrl();
-    const user = req.user as User;
+    const user = req.user as Pick<User, 'id' | 'email' | 'role'> | undefined;
     if (!user) {
       res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
       return;
@@ -148,7 +171,10 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: forgotPasswordUserSelect,
+    });
     if (!user) {
       // Return 200 anyway to prevent email enumeration
       res.status(200).json({ message: 'If an account exists, a reset link has been sent' });

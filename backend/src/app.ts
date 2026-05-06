@@ -22,6 +22,35 @@ Sentry.init({
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
 });
 
+const validateAbsoluteUrl = (envVar: string, value: string): void => {
+  try {
+    const parsedUrl = new URL(value);
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Unsupported protocol');
+    }
+  } catch {
+    console.error(`[Config] ${envVar} must be a valid absolute http(s) URL.`);
+    process.exit(1);
+  }
+};
+
+const validateCorsOrigins = (origins: string): void => {
+  const normalizedOrigins = origins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (normalizedOrigins.length === 0) {
+    console.error('[Config] CORS_ORIGIN must contain at least one origin.');
+    process.exit(1);
+  }
+
+  for (const origin of normalizedOrigins) {
+    validateAbsoluteUrl('CORS_ORIGIN', origin);
+  }
+};
+
 const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'GEMINI_API_KEY'];
 
 for (const envVar of requiredEnvVars) {
@@ -31,11 +60,20 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
+if (process.env.NODE_ENV === 'production') {
+  for (const envVar of ['FRONTEND_URL', 'CORS_ORIGIN']) {
+    if (!process.env[envVar]) {
+      console.error(`Missing required environment variable in production: ${envVar}`);
+      process.exit(1);
+    }
+  }
+}
+
 const optionalEnvGroups = [
   {
     name: 'Google OAuth',
-    keys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
-    fallback: 'Google sign-in will use stub credentials until both variables are set.',
+    keys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL'],
+    fallback: 'Google sign-in will remain disabled until all required OAuth variables are set.',
   },
   {
     name: 'Razorpay',
@@ -62,6 +100,18 @@ for (const { name, keys, fallback } of optionalEnvGroups) {
     console.error(`[Config] ${name} is partially configured. Missing: ${missingKeys.join(', ')}`);
     process.exit(1);
   }
+}
+
+if (process.env.FRONTEND_URL) {
+  validateAbsoluteUrl('FRONTEND_URL', process.env.FRONTEND_URL);
+}
+
+if (process.env.GOOGLE_CALLBACK_URL) {
+  validateAbsoluteUrl('GOOGLE_CALLBACK_URL', process.env.GOOGLE_CALLBACK_URL);
+}
+
+if (process.env.CORS_ORIGIN) {
+  validateCorsOrigins(process.env.CORS_ORIGIN);
 }
 
 const app: Application = express();

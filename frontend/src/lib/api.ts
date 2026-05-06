@@ -1,12 +1,13 @@
 import axios from 'axios';
 import * as Sentry from '@sentry/nextjs';
+import { getApiBaseUrl } from './backendUrl';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
   tracesSampleRate: 1.0,
 });
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -61,7 +62,15 @@ export const resumeAPI = {
 };
 
 export const interviewAPI = {
-  start: (data: { resumeId: string; category: string; language: string }) =>
+  start: (data: {
+    language: string;
+    resumeId?: string;
+    resume?: string;
+    category?: string;
+    role?: string;
+    subRole?: string;
+    customRole?: string;
+  }) =>
     api.post('/interviews/start', data),
   list: () => api.get('/interviews'),
   get: (id: string) => api.get(`/interviews/${id}`),

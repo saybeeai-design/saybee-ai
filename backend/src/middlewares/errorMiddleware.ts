@@ -4,6 +4,10 @@ import {
   markDatabaseUnhealthy,
   reconnectDatabaseInBackground,
 } from '../services/dbService';
+import {
+  getDatabaseErrorMessage,
+  isSchemaMismatchDatabaseError,
+} from '../utils/databaseErrors';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -20,6 +24,18 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, next: N
     res.status(503).json({
       code: 'DATABASE_UNAVAILABLE',
       message: 'Database connection was interrupted. Please retry in a few seconds.',
+    });
+    return;
+  }
+
+  if (isSchemaMismatchDatabaseError(err)) {
+    markDatabaseUnhealthy(err);
+    console.error(`[DB] Schema mismatch detected: ${getDatabaseErrorMessage(err)}`);
+
+    res.status(503).json({
+      code: 'DATABASE_SCHEMA_MISMATCH',
+      message:
+        'Database schema is out of date for the current backend release. Apply Prisma schema changes and retry.',
     });
     return;
   }

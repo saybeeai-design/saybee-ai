@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
 import { interviewAPI, resumeAPI } from '@/lib/api';
 import {
   AlertCircle,
@@ -37,13 +38,34 @@ interface InterviewRecord {
 
 type UploadStatus = 'idle' | 'uploading' | 'done' | 'error';
 
-const ROLE_OPTIONS = ['UPSC', 'APSC', 'State PSC', 'Banking', 'Custom'] as const;
+const ROLE_OPTIONS = ['UPSC', 'State PSC', 'SSC', 'Banking', 'Custom'] as const;
+const STATE_PSC_OPTIONS = [
+  'Assam PSC',
+  'WBPSC',
+  'BPSC',
+  'APPSC',
+  'UPPSC',
+  'MPPSC',
+  'Kerala PSC',
+  'TNPSC',
+  'OPSC',
+  'MPSC',
+] as const;
+const BANKING_OPTIONS = [
+  'SBI PO',
+  'SBI Clerk',
+  'IBPS PO',
+  'IBPS Clerk',
+  'RBI Grade B',
+  'NABARD',
+  'LIC AAO',
+] as const;
 const LANGUAGE_OPTIONS = [
   'English',
   'Hindi',
   'Assamese',
-  'Tamil',
   'Bengali',
+  'Tamil',
   'Telugu',
   'Marathi',
   'Gujarati',
@@ -60,6 +82,20 @@ function getRequestErrorMessage(error: unknown, fallbackMessage: string) {
   return response?.data?.message || response?.data?.error || fallbackMessage;
 }
 
+function getInterviewCategory(role: string, subRole: string, customRole: string) {
+  const trimmedCustomRole = customRole.trim();
+
+  if (role === 'Custom') {
+    return trimmedCustomRole;
+  }
+
+  if (subRole) {
+    return `${role} - ${subRole}`;
+  }
+
+  return role;
+}
+
 export default function InterviewDashboard() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +109,8 @@ export default function InterviewDashboard() {
 
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
+  const [selectedSubRole, setSelectedSubRole] = useState('');
+  const [customRole, setCustomRole] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
@@ -125,8 +163,17 @@ export default function InterviewDashboard() {
   }, []);
 
   const selectedResume = resumes.find((resume) => resume.id === selectedResumeId) ?? null;
+  const trimmedCustomRole = customRole.trim();
+  const requiresSubRole = selectedRole === 'State PSC' || selectedRole === 'Banking';
+  const requiresCustomRole = selectedRole === 'Custom';
+  const conditionalFieldComplete = requiresSubRole
+    ? Boolean(selectedSubRole)
+    : requiresCustomRole
+      ? Boolean(trimmedCustomRole)
+      : true;
+  const selectedCategory = getInterviewCategory(selectedRole, selectedSubRole, trimmedCustomRole);
   const canStartInterview =
-    Boolean(selectedResumeId && selectedRole && selectedLanguage) &&
+    Boolean(selectedResumeId && selectedRole && selectedLanguage && conditionalFieldComplete) &&
     !starting &&
     uploadStatus !== 'uploading';
 
@@ -145,7 +192,7 @@ export default function InterviewDashboard() {
     setError('');
   };
 
-  const handleResumeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleResumeUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -196,6 +243,13 @@ export default function InterviewDashboard() {
     }
   };
 
+  const handleRoleChange = (role: string) => {
+    setSelectedRole(role);
+    setSelectedSubRole('');
+    setCustomRole('');
+    setError('');
+  };
+
   const handleStartInterview = async () => {
     if (!selectedResumeId) {
       setError('Upload or select a resume to continue.');
@@ -204,6 +258,21 @@ export default function InterviewDashboard() {
 
     if (!selectedRole) {
       setError('Select a role to continue.');
+      return;
+    }
+
+    if (selectedRole === 'State PSC' && !selectedSubRole) {
+      setError('Select a State PSC exam to continue.');
+      return;
+    }
+
+    if (selectedRole === 'Banking' && !selectedSubRole) {
+      setError('Select a banking exam to continue.');
+      return;
+    }
+
+    if (selectedRole === 'Custom' && !trimmedCustomRole) {
+      setError('Enter your custom role or preparation type to continue.');
       return;
     }
 
@@ -222,8 +291,10 @@ export default function InterviewDashboard() {
 
     try {
       const response = await interviewAPI.start({
-        resumeId: selectedResumeId,
-        category: selectedRole,
+        resume: selectedResumeId,
+        role: selectedRole,
+        subRole: selectedSubRole,
+        customRole: trimmedCustomRole,
         language: selectedLanguage,
       });
       const interviewId = response.data.interview?.id;
@@ -265,7 +336,7 @@ export default function InterviewDashboard() {
               <Brain className="w-32 h-32 text-blue-400" />
             </div>
 
-            <div className="relative z-10 space-y-8">
+            <div className="relative z-10 space-y-6">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -274,135 +345,262 @@ export default function InterviewDashboard() {
                 onChange={handleResumeUpload}
               />
 
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-300">
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    Resume
-                  </label>
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/35 p-5 space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-400">Step 1</p>
+                    <h2 className="mt-2 text-lg font-semibold text-white">Resume Selection</h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Choose the resume that should drive interview context and feedback.
+                    </p>
+                  </div>
+                  {selectedResume && (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Uploaded
+                    </span>
+                  )}
+                </div>
 
-                  {selectedResume ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl border bg-slate-900/50 border-slate-700">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-400">
-                            <FileText className="w-5 h-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                              Uploaded Resume
-                            </p>
-                            <p className="text-sm font-semibold text-white truncate">
-                              {selectedResume.fileName}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {resumeFile?.name === selectedResume.fileName && uploadStatus === 'done'
-                                ? 'Latest upload is ready.'
-                                : 'Resume ready for interview setup.'}
-                            </p>
-                          </div>
+                {selectedResume ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-4 rounded-xl border border-slate-700 bg-slate-950/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600/10 text-blue-400">
+                          <FileText className="w-5 h-5" />
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={openResumePicker}
-                          disabled={uploadStatus === 'uploading'}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-medium text-white hover:border-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          {uploadStatus === 'uploading' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Upload className="w-4 h-4" />
-                          )}
-                          Change resume
-                        </button>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Active Resume
+                          </p>
+                          <p className="mt-1 truncate text-sm font-semibold text-white">
+                            {selectedResume.fileName}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {resumeFile?.name === selectedResume.fileName && uploadStatus === 'done'
+                              ? 'Latest upload is ready for this interview.'
+                              : 'This file will be used for question context and evaluation.'}
+                          </p>
+                        </div>
                       </div>
 
-                      {resumes.length > 1 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {resumes.map((resume) => (
-                            <button
-                              key={resume.id}
-                              type="button"
-                              onClick={() => handleResumeSelect(resume.id)}
-                              className={`flex items-center gap-3 p-4 rounded-xl border transition-all text-left ${
+                      <button
+                        type="button"
+                        onClick={openResumePicker}
+                        disabled={uploadStatus === 'uploading'}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {uploadStatus === 'uploading' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4" />
+                        )}
+                        Change Resume
+                      </button>
+                    </div>
+
+                    {resumes.length > 1 && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {resumes.map((resume) => (
+                          <button
+                            key={resume.id}
+                            type="button"
+                            onClick={() => handleResumeSelect(resume.id)}
+                            className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-all ${
+                              selectedResumeId === resume.id
+                                ? 'border-blue-500 bg-blue-600/10 text-white ring-2 ring-blue-500/20'
+                                : 'border-slate-700 bg-slate-950/50 text-slate-400 hover:border-slate-600'
+                            }`}
+                          >
+                            <div
+                              className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                                 selectedResumeId === resume.id
-                                  ? 'bg-blue-600/10 border-blue-500 text-white ring-2 ring-blue-500/20'
-                                  : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-slate-800 text-slate-500'
                               }`}
                             >
-                              <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                  selectedResumeId === resume.id
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-800 text-slate-500'
-                                }`}
-                              >
-                                <FileText className="w-4 h-4" />
-                              </div>
-                              <span className="text-sm font-medium truncate">{resume.fileName}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={openResumePicker}
-                      disabled={uploadStatus === 'uploading'}
-                      className="w-full p-6 rounded-xl border border-dashed border-slate-700 bg-slate-900/50 text-center transition-colors hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Upload className="w-8 h-8 mx-auto mb-3 text-blue-400" />
-                      <p className="text-sm font-semibold text-white">
-                        {uploadStatus === 'uploading' ? 'Uploading resume...' : 'Upload your PDF resume'}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">PDF only · Max 5MB</p>
-                    </button>
-                  )}
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <span className="truncate text-sm font-medium">{resume.fileName}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openResumePicker}
+                    disabled={uploadStatus === 'uploading'}
+                    className="w-full rounded-xl border border-dashed border-slate-700 bg-slate-950/45 p-6 text-center transition-colors hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Upload className="mx-auto mb-3 h-8 w-8 text-blue-400" />
+                    <p className="text-sm font-semibold text-white">
+                      {uploadStatus === 'uploading' ? 'Uploading resume...' : 'Upload your PDF resume'}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">PDF only · Max 5MB</p>
+                  </button>
+                )}
 
-                  {uploadMessage && (
-                    <div
-                      className={`flex items-center gap-3 p-4 rounded-xl text-sm border ${
-                        uploadStatus === 'error'
-                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                          : uploadStatus === 'done'
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                            : 'bg-blue-500/10 border-blue-500/20 text-blue-300'
-                      }`}
-                    >
-                      {uploadStatus === 'error' ? (
-                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                      ) : uploadStatus === 'done' ? (
-                        <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-                      ) : (
-                        <Loader2 className="w-5 h-5 flex-shrink-0 animate-spin" />
-                      )}
-                      {uploadMessage}
-                    </div>
-                  )}
+                {uploadMessage && (
+                  <div
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-sm ${
+                      uploadStatus === 'error'
+                        ? 'border-rose-500/20 bg-rose-500/10 text-rose-400'
+                        : uploadStatus === 'done'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                          : 'border-blue-500/20 bg-blue-500/10 text-blue-300'
+                    }`}
+                  >
+                    {uploadStatus === 'error' ? (
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    ) : uploadStatus === 'done' ? (
+                      <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                    ) : (
+                      <Loader2 className="w-5 h-5 flex-shrink-0 animate-spin" />
+                    )}
+                    {uploadMessage}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/35 p-5 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-400">Step 2</p>
+                  <h2 className="mt-2 text-lg font-semibold text-white">Role Selection</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Pick the interview track so SayBee AI can tailor the session correctly.
+                  </p>
                 </div>
 
                 <div className="space-y-3">
                   <label className="flex items-center gap-2 text-sm font-semibold text-slate-300">
                     <Brain className="w-4 h-4 text-blue-400" />
-                    Interview Role
+                    Select Role
                   </label>
                   <select
                     value={selectedRole}
-                    onChange={(event) => {
-                      setSelectedRole(event.target.value);
-                      setError('');
-                    }}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/50 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                    onChange={(event) => handleRoleChange(event.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/50 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-blue-500"
                   >
-                    <option value="">Select a role</option>
+                    <option value="">Choose a role</option>
                     {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>
                         {role}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <AnimatePresence initial={false}>
+                  {selectedRole === 'State PSC' && (
+                    <motion.div
+                      key="state-psc"
+                      initial={{ opacity: 0, y: -8, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -8, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/45 p-4">
+                        <label className="text-sm font-semibold text-slate-300">Select State PSC</label>
+                        <select
+                          value={selectedSubRole}
+                          onChange={(event) => {
+                            setSelectedSubRole(event.target.value);
+                            setError('');
+                          }}
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                        >
+                          <option value="">Choose a State PSC exam</option>
+                          {STATE_PSC_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {selectedRole === 'Banking' && (
+                    <motion.div
+                      key="banking"
+                      initial={{ opacity: 0, y: -8, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -8, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/45 p-4">
+                        <label className="text-sm font-semibold text-slate-300">Select Banking Exam</label>
+                        <select
+                          value={selectedSubRole}
+                          onChange={(event) => {
+                            setSelectedSubRole(event.target.value);
+                            setError('');
+                          }}
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                        >
+                          <option value="">Choose a banking exam</option>
+                          {BANKING_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {selectedRole === 'Custom' && (
+                    <motion.div
+                      key="custom-role"
+                      initial={{ opacity: 0, y: -8, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -8, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/45 p-4">
+                        <label className="text-sm font-semibold text-slate-300">
+                          Enter Role or Preparation Type
+                        </label>
+                        <input
+                          type="text"
+                          value={customRole}
+                          onChange={(event) => {
+                            setCustomRole(event.target.value);
+                            setError('');
+                          }}
+                          placeholder="Enter role or preparation type"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-500 focus:border-blue-500"
+                        />
+                        <p className="text-xs text-slate-500">
+                          Examples: Data Scientist, Software Engineer, Army Interview
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {selectedCategory && (
+                  <div className="rounded-xl border border-blue-500/10 bg-blue-500/5 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
+                      Selected Track
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-white">{selectedCategory}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/35 p-5 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-400">Step 3</p>
+                  <h2 className="mt-2 text-lg font-semibold text-white">Language Selection</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Choose the language for questions, responses, and evaluation.
+                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -419,10 +617,10 @@ export default function InterviewDashboard() {
                           setSelectedLanguage(language);
                           setError('');
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                        className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
                           selectedLanguage === language
-                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20'
-                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                            ? 'border-blue-500 bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                            : 'border-slate-700 bg-slate-950/50 text-slate-400 hover:border-slate-600'
                         }`}
                       >
                         {language}
@@ -433,7 +631,7 @@ export default function InterviewDashboard() {
               </div>
 
               {error && (
-                <div className="flex items-center gap-3 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-sm">
+                <div className="flex items-center gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-400">
                   <AlertCircle className="w-5 h-5 flex-shrink-0" />
                   {error}
                 </div>
@@ -443,7 +641,7 @@ export default function InterviewDashboard() {
                 type="button"
                 onClick={handleStartInterview}
                 disabled={!canStartInterview}
-                className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-lg transition-all shadow-xl shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="w-full flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-lg font-bold text-white shadow-xl shadow-blue-500/25 transition-all active:scale-[0.98] hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {starting ? (
                   <>
@@ -452,7 +650,7 @@ export default function InterviewDashboard() {
                   </>
                 ) : (
                   <>
-                    <Play className="w-6 h-6 fill-current group-hover:scale-110 transition-transform" />
+                    <Play className="w-6 h-6 fill-current transition-transform" />
                     Start Interview
                   </>
                 )}

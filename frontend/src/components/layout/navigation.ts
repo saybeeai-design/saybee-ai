@@ -38,7 +38,7 @@ export function getPageMeta(pathname: string): PageMeta {
 
   if (pathname.startsWith('/dashboard/chat')) {
     return {
-      title: 'AI Assistant',
+      title: 'Chat',
     };
   }
 

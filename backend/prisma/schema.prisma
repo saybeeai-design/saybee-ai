@@ -27,6 +27,7 @@ model User {
   resumes          Resume[]
   interviews       Interview[]
   subscriptions    Subscription[]
+  payments         PaymentRecord[]
 
   @@index([email])
 }
@@ -97,6 +98,28 @@ model Subscription {
   startDate DateTime     @default(now())
   endDate   DateTime?
   stripeSubscriptionId String?
+}
+
+model PaymentRecord {
+  id           String    @id @default(uuid())
+  paymentId    String    @unique
+  orderId      String?
+  provider     String    @default("RAZORPAY")
+  eventType    String
+  email        String
+  amount       Int
+  creditsAdded Int
+  status       String    @default("PROCESSED")
+  rawPayload   Json?
+  processedAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+  @@index([status])
 }
 
 model Coupon {

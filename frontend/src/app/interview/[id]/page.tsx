@@ -61,8 +61,7 @@ export default function InterviewPage() {
 
     initWebcam();
     synthRef.current = window.speechSynthesis;
-    
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     loadFirstQuestion();
     
     return () => {
@@ -105,7 +104,7 @@ export default function InterviewPage() {
       setPhase('speaking');
       playAudio(q.tts, q.question.content, () => setPhase('listening'));
     } catch (err: any) {
-      toast.error('Failed to start interview');
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to start interview');
       router.push('/dashboard');
     }
   };
@@ -167,7 +166,7 @@ export default function InterviewPage() {
         playAudio(data.tts, next.content, () => setPhase('listening'));
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to submit answer');
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to submit answer');
       setPhase('listening');
     }
   };

@@ -10,6 +10,7 @@ interface RazorpayCheckoutOptions {
   orderId: string;
   name: string;
   description: string;
+  key?: string | null;
   email?: string;
   contact?: string;
   onSuccess: (response: RazorpayPaymentResponse) => Promise<void>;
@@ -56,17 +57,19 @@ export async function openRazorpayCheckout({
   orderId,
   name,
   description,
+  key: providedKey,
   email,
   contact,
   onSuccess,
 }: RazorpayCheckoutOptions): Promise<void> {
   const key =
+    providedKey ||
     process.env.NEXT_PUBLIC_RAZORPAY_KEY ||
     process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
     '';
 
   if (!key) {
-    throw new Error('Missing NEXT_PUBLIC_RAZORPAY_KEY or NEXT_PUBLIC_RAZORPAY_KEY_ID');
+    throw new Error('Missing Razorpay checkout key. Restart the frontend and backend after updating payment env vars.');
   }
 
   const isLoaded = await loadRazorpay();

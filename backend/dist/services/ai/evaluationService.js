@@ -38,9 +38,9 @@ The JSON must follow this exact structure:
   "suggestions": ["suggestion1", "suggestion2"],
   "summary": "<2-3 sentence overall assessment>"
 }`;
-        const model = (0, geminiClient_1.getGeminiModel)();
-        const result = yield model.generateContent(prompt);
-        const raw = result.response.text().trim();
+        const raw = yield (0, geminiClient_1.generateGeminiText)(prompt, {
+            label: `evaluateAnswer (${stage})`,
+        });
         // Strip markdown code fences if Gemini includes them
         const cleaned = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
         let parsed;
@@ -89,10 +89,10 @@ The JSON must follow this exact structure:
   "suggestions": ["actionable advice 1", "actionable advice 2", "actionable advice 3"],
   "overallSummary": "<1 paragraph detailed summary of their performance>"
 }`;
-        const model = (0, geminiClient_1.getGeminiModel)();
         try {
-            const result = yield model.generateContent(prompt);
-            const raw = result.response.text().trim();
+            const raw = yield (0, geminiClient_1.generateGeminiText)(prompt, {
+                label: 'generateFinalReport',
+            });
             const cleaned = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
             const parsed = JSON.parse(cleaned);
             return parsed;

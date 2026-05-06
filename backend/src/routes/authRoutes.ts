@@ -8,6 +8,10 @@ import {
   googleAuthCallback,
   resolveFrontendUrl,
 } from '../controllers/authController';
+import {
+  getDatabaseErrorMessage,
+  isSchemaMismatchDatabaseError,
+} from '../utils/databaseErrors';
 
 const router = Router();
 
@@ -34,8 +38,16 @@ router.get(
       const frontendUrl = resolveFrontendUrl();
 
       if (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[Auth] Google OAuth callback failed: ${message}`);
+        const message = getDatabaseErrorMessage(error);
+
+        if (isSchemaMismatchDatabaseError(error)) {
+          console.error(
+            `[Auth] Google OAuth callback blocked by database schema mismatch: ${message}. Render must run "npx prisma db push" against the production database.`
+          );
+        } else {
+          console.error(`[Auth] Google OAuth callback failed: ${message}`);
+        }
+
         res.redirect(`${frontendUrl}/auth-callback?error=Google_Auth_Failed`);
         return;
       }

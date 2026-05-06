@@ -1,10 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash-latest"
-});
+import { generateGeminiText } from './geminiClient';
 
 /**
  * Generates an interview question based on the provided context (e.g. resume data).
@@ -21,10 +15,7 @@ ${context}
 The question should be concise and relevant.
 `;
 
-  const result = await model.generateContent(prompt);
-  const response = result.response.text();
-
-  return response.trim();
+  return generateGeminiText(prompt, { label: 'generateInterviewQuestion (legacy)' });
 }
 
 /**
@@ -50,8 +41,5 @@ Provide feedback including:
 - Suggestions
 `;
 
-  const result = await model.generateContent(prompt);
-  const response = result.response.text();
-
-  return response.trim();
+  return generateGeminiText(prompt, { label: 'evaluateAnswer (legacy)' });
 }

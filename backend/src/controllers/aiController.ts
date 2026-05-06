@@ -1,8 +1,16 @@
 import { Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
-import { evaluateAnswer, generateInterviewQuestion as legacyGenerate } from '../services/ai/geminiService';
-import { generateInterviewQuestion, generateFollowUpQuestion } from '../services/ai/questionService';
+import { evaluateAnswer } from '../services/ai/evaluationService';
+import {
+  extractResumeContext,
+  getInterviewConfigFromReportData,
+} from '../services/ai/promptBuilder';
+import {
+  buildQuestionFallback,
+  generateInterviewQuestion,
+  generateFollowUpQuestion,
+} from '../services/ai/questionService';
 import { transcribeBuffer } from '../services/ai/speechToTextService';
 import { textToSpeech, getLanguageCode } from '../services/ai/textToSpeechService';
 import { INTERVIEW_STAGES } from './interviewController';
@@ -19,32 +27,15 @@ function getCurrentStage(questionCount: number) {
   return { stage: INTERVIEW_STAGES[stageIndex], stageIndex };
 }
 
-const PLACEHOLDER_QUESTIONS: Record<string, string[]> = {
-  Introduction: [
-    'Tell me about yourself and your background.',
-    'What motivated you to apply for this position?',
-    'Describe your overall career journey so far.',
-  ],
-  Technical: [
-    'What are your core technical skills and areas of expertise?',
-    'Describe a challenging technical problem you solved recently.',
-    'How do you approach debugging a complex issue in production?',
-  ],
-  Scenario: [
-    'Describe a time you had to deliver under a tight deadline. How did you manage it?',
-    'Tell me about a situation where you disagreed with your team. How was it resolved?',
-    'Give an example of a project where you had to learn something new quickly.',
-  ],
-  HR: [
-    'Where do you see yourself in the next 5 years?',
-    'What are your biggest professional strengths and areas for improvement?',
-    'How do you handle stress and pressure at work?',
-  ],
-  Closing: [
-    'Do you have any questions for us?',
-    'Is there anything else you would like us to know about you?',
-    'When are you available to start if selected?',
-  ],
+const EVALUATION_FALLBACK = {
+  communication: 5,
+  confidence: 5,
+  score: 5,
+  strengths: ['Responded to the question'],
+  suggestions: ['Please provide a more detailed answer'],
+  summary: 'Evaluation is temporarily unavailable.',
+  technicalAccuracy: 5,
+  weaknesses: ['Answer could not be fully evaluated'],
 };
 
 // ─── PHASE 1: POST /api/interviews/:id/generate-question ─────────────────────
@@ -94,30 +85,29 @@ export const generateAIQuestion = async (
 
     const { stage, stageIndex } = getCurrentStage(totalQuestions);
     const previousQuestions = interview.questions.map((q) => q.content);
+    const interviewConfig = getInterviewConfigFromReportData(interview.reportData, {
+      category: interview.category,
+      language: interview.language,
+    });
+    const resumeSummary = extractResumeContext(
+      interview.resume.parsedData,
+      interview.resume.fileName,
+      interviewConfig.category
+    );
 
-    // Build resume summary for the prompt
-    const resumeSummary =
-      (interview.resume.parsedData as Record<string, string> | null)?.summary ??
-      `File: ${interview.resume.fileName}`;
-
-    // 1. Generate question via Gemini
-    let generatedContent = '';
+    let generatedQuestion = buildQuestionFallback({
+      interviewConfig,
+      stage,
+    });
     try {
-      const generated = await generateInterviewQuestion({
-        stage,
-        category: interview.category,
-        language: interview.language,
-        resumeSummary,
+      generatedQuestion = await generateInterviewQuestion({
+        interviewConfig,
         previousQuestions,
+        resumeSummary,
+        stage,
       });
-      generatedContent = generated.content;
     } catch (err: any) {
-      console.warn('Gemini AI failed to generate question, using fallback:', err.message);
-      const stageQuestions = PLACEHOLDER_QUESTIONS[stage] || PLACEHOLDER_QUESTIONS.Introduction;
-      const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
-      generatedContent = available.length > 0
-        ? available[Math.floor(Math.random() * available.length)]
-        : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+      console.error('Gemini AI failed to generate question, using fallback:', err);
     }
 
 
@@ -125,7 +115,7 @@ export const generateAIQuestion = async (
     const question = await prisma.question.create({
       data: {
         interviewId,
-        content: generatedContent,
+        content: generatedQuestion.question,
         order: totalQuestions + 1,
       },
     });
@@ -134,7 +124,7 @@ export const generateAIQuestion = async (
     let ttsResult = null;
     if (speakQuestion) {
       const langCode = getLanguageCode(interview.language);
-      ttsResult = await textToSpeech(generatedContent, langCode);
+      ttsResult = await textToSpeech(generatedQuestion.question, langCode);
     }
 
     const isLastQuestion = totalQuestions + 1 >= maxQuestions;
@@ -146,6 +136,7 @@ export const generateAIQuestion = async (
       totalStages: INTERVIEW_STAGES.length,
       questionNumber: totalQuestions + 1,
       totalQuestions: maxQuestions,
+      questionMeta: generatedQuestion,
       isLastQuestion,
       tts: ttsResult,
     });
@@ -195,21 +186,25 @@ export const evaluateQuestionAnswer = async (
     );
     const stage = INTERVIEW_STAGES[stageIndex];
 
-    // Run Gemini evaluation
-    let feedback;
+    let feedback = EVALUATION_FALLBACK;
     try {
-      feedback = await evaluateAnswer(question.content, question.answer.content);
+      feedback = await evaluateAnswer({
+        answer: question.answer.content,
+        category: question.interview.category,
+        language: question.interview.language,
+        question: question.content,
+        stage,
+      });
     } catch (err: any) {
-      console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-      feedback = "AI evaluation unavailable right now.";
+      console.error('Gemini AI failed to evaluate answer, using fallback:', err);
     }
 
     // Update the answer with AI evaluation
     const updatedAnswer = await prisma.answer.update({
       where: { id: question.answer.id },
       data: {
-        score: parseInt(feedback.match(/Score:?\s*(\d+)/i)?.[1] || '5'),
-        evaluation: feedback,
+        score: feedback.score,
+        evaluation: JSON.stringify(feedback),
       },
     });
 
@@ -336,22 +331,25 @@ export const nextInterviewTurn = async (
     );
     const stage = INTERVIEW_STAGES[stageIndex];
 
-    let evaluation;
-    // 2. Evaluate answer using Gemini
-    let feedback;
+    let feedback = EVALUATION_FALLBACK;
     try {
-      feedback = await evaluateAnswer(question.content, answerContent);
+      feedback = await evaluateAnswer({
+        answer: answerContent,
+        category: question.interview.category,
+        language: question.interview.language,
+        question: question.content,
+        stage,
+      });
     } catch (err: any) {
-      console.warn('Gemini AI failed to evaluate answer, using fallback:', err.message);
-      feedback = "AI evaluation unavailable right now.";
+      console.error('Gemini AI failed to evaluate answer, using fallback:', err);
     }
 
     // Persist evaluation
     const evaluatedAnswer = await prisma.answer.update({
       where: { id: savedAnswer.id },
       data: { 
-        score: parseInt(feedback.match(/Score:?\s*(\d+)/i)?.[1] || '5'), 
-        evaluation: feedback 
+        score: feedback.score, 
+        evaluation: JSON.stringify(feedback), 
       },
     });
 
@@ -378,11 +376,18 @@ export const nextInterviewTurn = async (
 
     const totalAsked = currentInterview!.questions.length;
     const maxQuestions = INTERVIEW_STAGES.length * QUESTIONS_PER_STAGE;
-    const resumeSummary =
-      (currentInterview!.resume.parsedData as Record<string, string> | null)?.summary ??
-      `File: ${currentInterview!.resume.fileName}`;
+    const interviewConfig = getInterviewConfigFromReportData(currentInterview!.reportData, {
+      category: currentInterview!.category,
+      language: currentInterview!.language,
+    });
+    const resumeSummary = extractResumeContext(
+      currentInterview!.resume.parsedData,
+      currentInterview!.resume.fileName,
+      interviewConfig.category
+    );
 
     let nextQuestion = null;
+    let nextQuestionMeta = null;
     let tts = null;
     let interviewDone = false;
     let isFollowUp = false;
@@ -396,20 +401,22 @@ export const nextInterviewTurn = async (
       const { stage: nextStage } = getCurrentStage(totalAsked);
       const previousQuestions = currentInterview!.questions.map((q) => q.content);
 
-      let generatedContent = '';
+      let generatedQuestion = buildQuestionFallback({
+        interviewConfig,
+        stage: nextStage,
+      });
 
       if (currentFollowUpCount < MAX_FOLLOW_UPS) {
         // ── Generate follow-up based on the last answer ───────────────────────
         try {
-          const followUp = await generateFollowUpQuestion({
+          generatedQuestion = await generateFollowUpQuestion({
+            followUpCount: currentFollowUpCount,
+            interviewConfig,
             lastQuestion: question.content,
-            userAnswer: answerContent,
             resumeSummary,
-            category: currentInterview!.category,
-            language: currentInterview!.language,
             stage,
+            userAnswer: answerContent,
           });
-          generatedContent = followUp.content;
           isFollowUp = true;
 
           // Persist updated follow-up count
@@ -419,7 +426,7 @@ export const nextInterviewTurn = async (
             data: { reportData: { ...reportMeta, followUpMap: updatedFollowUpMap } as any },
           });
         } catch (err: any) {
-          console.warn('[FollowUp] Follow-up generation failed, advancing to new question:', err.message);
+          console.error('[FollowUp] Follow-up generation failed, advancing to new question:', err);
           isFollowUp = false;
         }
       }
@@ -427,36 +434,30 @@ export const nextInterviewTurn = async (
       if (!isFollowUp) {
         // ── Follow-up cap reached — generate fresh main question ─────────────
         try {
-          const generated = await generateInterviewQuestion({
-            stage: nextStage,
-            category: currentInterview!.category,
-            language: currentInterview!.language,
-            resumeSummary,
+          generatedQuestion = await generateInterviewQuestion({
+            interviewConfig,
             previousQuestions,
+            resumeSummary,
+            stage: nextStage,
           });
-          generatedContent = generated.content;
         } catch (err: any) {
-          console.warn('[Question] New question generation failed, using fallback:', err.message);
-          const stageQuestions = PLACEHOLDER_QUESTIONS[nextStage] || PLACEHOLDER_QUESTIONS.Introduction;
-          const available = stageQuestions.filter((q) => !previousQuestions.includes(q));
-          generatedContent = available.length > 0
-            ? available[Math.floor(Math.random() * available.length)]
-            : stageQuestions[Math.floor(Math.random() * stageQuestions.length)];
+          console.error('[Question] New question generation failed, using fallback:', err);
         }
       }
 
       nextQuestion = await prisma.question.create({
         data: {
           interviewId,
-          content: generatedContent,
+          content: generatedQuestion.question,
           order: totalAsked + 1,
         },
       });
+      nextQuestionMeta = generatedQuestion;
 
       // ── 5. Speak the next question ──────────────────────────────────────────
       if (speakNextQuestion) {
         const langCode = getLanguageCode(currentInterview!.language);
-        tts = await textToSpeech(generatedContent, langCode);
+        tts = await textToSpeech(generatedQuestion.question, langCode);
       }
     } else {
       interviewDone = true;
@@ -472,6 +473,7 @@ export const nextInterviewTurn = async (
       evaluation: feedback,
       evaluatedAnswer,
       nextQuestion,
+      nextQuestionMeta,
       tts,
       interviewDone,
       message: interviewDone

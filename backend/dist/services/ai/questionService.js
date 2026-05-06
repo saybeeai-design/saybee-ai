@@ -69,9 +69,9 @@ Requirements:
 - Ask only one clear, concise question.
 - Do not include any explanation, preamble, numbering, or introductory text.
 - Output the question text ONLY.`;
-        const model = (0, geminiClient_1.getGeminiModel)();
-        const result = yield model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const text = yield (0, geminiClient_1.generateGeminiText)(prompt, {
+            label: `generateInterviewQuestion (${stage})`,
+        });
         return { content: text, stage, usedWebContext };
     });
 }
@@ -116,9 +116,9 @@ Rules:
 - Do NOT repeat the previous question.
 - Sound like a real human, not a robot.
 - Ask ONLY ONE question.`;
-        const model = (0, geminiClient_1.getGeminiModel)();
-        const result = yield model.generateContent(prompt);
-        const text = result.response.text().trim();
+        const text = yield (0, geminiClient_1.generateGeminiText)(prompt, {
+            label: `generateFollowUpQuestion (${stage})`,
+        });
         return { content: text, stage, isFollowUp: true };
     });
 }

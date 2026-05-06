@@ -1,27 +1,28 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+import { createChatFallbackResponse, generateChatReply } from '@/lib/server/geminiChatService';
 
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const body = (await req.json()) as { message?: unknown };
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
 
     if (!message) {
-      return Response.json({ error: "Message is required" }, { status: 400 });
+      return Response.json(
+        {
+          success: false,
+          error: 'Message is required',
+          data: {
+            message: '',
+          },
+        },
+        { status: 400 }
+      );
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest"
-    });
-
-    const result = await model.generateContent(message);
-    const reply = result.response.text();
-
-    return Response.json({
-      reply: reply
-    });
+    const result = await generateChatReply(message);
+    return Response.json(result, { status: 200 });
   } catch (error) {
-    console.error("AI Chat Route Error:", error);
-    return Response.json({ error: "Failed to fetch AI response" }, { status: 500 });
+    console.error('AI Chat Route Error:', error);
+
+    return Response.json(createChatFallbackResponse(), { status: 200 });
   }
 }

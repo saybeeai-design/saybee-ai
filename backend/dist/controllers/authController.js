@@ -16,6 +16,7 @@ exports.resetPassword = exports.forgotPassword = exports.resolveFrontendUrl = ex
 const db_1 = __importDefault(require("../config/db"));
 const helpers_1 = require("../utils/helpers");
 const emailService_1 = require("../services/emailService");
+const client_1 = require("@prisma/client");
 const resolveFrontendUrl = () => {
     var _a, _b, _c;
     const configuredFrontendUrl = (_a = process.env.FRONTEND_URL) === null || _a === void 0 ? void 0 : _a.trim();
@@ -28,6 +29,20 @@ const resolveFrontendUrl = () => {
     return preferredUrl.replace(/\/+$/, '');
 };
 exports.resolveFrontendUrl = resolveFrontendUrl;
+const signupLookupSelect = client_1.Prisma.validator()({
+    id: true,
+});
+const loginUserSelect = client_1.Prisma.validator()({
+    id: true,
+    name: true,
+    email: true,
+    password: true,
+    role: true,
+    createdAt: true,
+});
+const forgotPasswordUserSelect = client_1.Prisma.validator()({
+    email: true,
+});
 // ─── POST /api/auth/signup ────────────────────────────────────────────────────
 const signup = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -40,7 +55,10 @@ const signup = (req, res, next) => __awaiter(void 0, void 0, void 0, function* (
             res.status(400).json({ message: 'Password must be at least 8 characters' });
             return;
         }
-        const existingUser = yield db_1.default.user.findUnique({ where: { email } });
+        const existingUser = yield db_1.default.user.findUnique({
+            where: { email },
+            select: signupLookupSelect,
+        });
         if (existingUser) {
             res.status(409).json({ message: 'A user with this email already exists' });
             return;
@@ -72,7 +90,10 @@ const login = (req, res, next) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(400).json({ message: 'Email and password are required' });
             return;
         }
-        const user = yield db_1.default.user.findUnique({ where: { email } });
+        const user = yield db_1.default.user.findUnique({
+            where: { email },
+            select: loginUserSelect,
+        });
         if (!user) {
             res.status(401).json({ message: 'Invalid email or password' });
             return;
@@ -126,7 +147,10 @@ const forgotPassword = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
             res.status(400).json({ message: 'Email is required' });
             return;
         }
-        const user = yield db_1.default.user.findUnique({ where: { email } });
+        const user = yield db_1.default.user.findUnique({
+            where: { email },
+            select: forgotPasswordUserSelect,
+        });
         if (!user) {
             // Return 200 anyway to prevent email enumeration
             res.status(200).json({ message: 'If an account exists, a reset link has been sent' });
