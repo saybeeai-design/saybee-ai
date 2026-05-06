@@ -361,7 +361,7 @@ export default function LandingPage() {
       <section className="py-24 bg-indigo-600/5 px-6">
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {[
-            { name: 'Siddharth M.', role: 'Software Engineer at Google', text: 'SayBee helped me refine my technical behavior responses. The AI feedback on my pacing was 100% accurate.' },
+            { name: 'Pinky Ahmed', role: 'UPSC Aspirant', text: 'SayBee helped me refine my interview behavior responses. The AI feedback on my pacing was 100% accurate.' },
             { name: 'Priya R.', role: 'UI/UX Designer', text: 'The glass-morphism UI is stunning, but it\'s the realistic AI persona that really prepared me for my big tech interview.' },
             { name: 'Arjun S.', role: 'Data Analyst', text: 'I practiced in Hindi first to get comfortable, then switched to English. The multi-language support is a game changer.' },
           ].map((t, i) => (

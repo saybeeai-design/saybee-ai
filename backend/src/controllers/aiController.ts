@@ -432,6 +432,102 @@ export const nextInterviewTurn = async (
       }
 
       if (!isFollowUp) {
+        try {
+          generatedQuestion = await generateInterviewQuestion({
+            interviewConfig,
+            previousQuestions,
+            resumeSummary,
+            stage: nextStage,
+          });
+        } catch (err: any) {
+          console.error('Gemini AI failed to generate next question, using fallback:', err);
+        }
+      }
+
+      if (isFollowUp) {
+        // Persist follow-up as a new Question record
+        nextQuestion = await prisma.question.create({
+          data: {
+            interviewId,
+            content: generatedQuestion.question,
+            order: totalAsked + 1,
+          },
+        });
+      } else {
+        // Persist new main question
+        nextQuestion = await prisma.question.create({
+          data: {
+            interviewId,
+            content: generatedQuestion.question,
+            order: totalAsked + 1,
+          },
+        });
+      }
+
+      nextQuestionMeta = generatedQuestion;
+
+      // Optionally convert next question to speech
+      if (speakNextQuestion && nextQuestion) {
+        const langCode = getLanguageCode(currentInterview!.language);
+        tts = await textToSpeech(nextQuestion.content, langCode);
+      }
+    } else {
+      // No more questions: interview is complete
+      interviewDone = true;
+      await prisma.interview.update({
+        where: { id: interviewId },
+        data: { status: 'COMPLETED' },
+      });
+    }
+
+    res.status(200).json({
+      evaluatedAnswer,
+      feedback,
+      nextQuestion,
+      nextQuestionMeta,
+      tts,
+      interviewDone,
+      isFollowUp,
+      totalAsked,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── POST /api/ai/upload ─────────────────────────────────────────────────────
+// General file upload endpoint for chat file sharing
+export const uploadChatFile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+
+    const { uploadFileToCloud } = await import('../services/storageService');
+    const fileUrl = await uploadFileToCloud(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    res.status(200).json({
+      success: true,
+      fileUrl,
+      fileId: req.file.originalname,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+      if (!isFollowUp) {
         // ── Follow-up cap reached — generate fresh main question ─────────────
         try {
           generatedQuestion = await generateInterviewQuestion({

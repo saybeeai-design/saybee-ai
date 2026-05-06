@@ -1,7 +1,7 @@
 'use client';
 
-import ChatWorkspace from '@/components/dashboard/ChatWorkspace';
+import PremiumChatWorkspace from '@/components/dashboard/PremiumChatWorkspace';
 
 export default function ChatPage() {
-  return <ChatWorkspace />;
+  return <PremiumChatWorkspace />;
 }
