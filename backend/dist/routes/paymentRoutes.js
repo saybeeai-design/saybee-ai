@@ -4,7 +4,8 @@ const express_1 = require("express");
 const paymentController_1 = require("../controllers/paymentController");
 const authMiddleware_1 = require("../middlewares/authMiddleware");
 const router = (0, express_1.Router)();
-// All payment routes require authentication
+router.post('/webhook', paymentController_1.webhookPayment);
+// All remaining payment routes require authentication
 router.use(authMiddleware_1.protect);
 // POST /api/payments/create-order  → Razorpay order creation
 router.post('/create-order', paymentController_1.createOrder);

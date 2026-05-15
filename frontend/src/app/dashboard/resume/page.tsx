@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { resumeAPI } from '@/lib/api';
 import { Upload, FileText, Trash2, RefreshCw } from 'lucide-react';
+import { isAxiosError } from 'axios';
 
 interface Resume { id: string; fileName: string; fileUrl: string; createdAt: string; }
 
@@ -35,8 +36,11 @@ export default function ResumePage() {
       await resumeAPI.upload(fd);
       toast.success('Resume uploaded successfully!');
       fetchResumes();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Upload failed');
+    } catch (err: unknown) {
+      const message = isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message || 'Upload failed'
+        : 'Upload failed';
+      toast.error(message);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

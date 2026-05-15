@@ -1,8 +1,12 @@
+import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { hashPassword, comparePassword, generateToken } from '../utils/helpers';
 import { sendPasswordReset, sendSignupConfirmation } from '../services/emailService';
 import { Prisma, User } from '@prisma/client';
+import { assertNonEmptyString, isValidEmail, isValidPassword, sanitizeName } from '../utils/validation';
+
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 
 const resolveFrontendUrl = (): string => {
   const configuredFrontendUrl = process.env.FRONTEND_URL?.trim();
@@ -22,6 +26,16 @@ const resolveFrontendUrl = (): string => {
   return preferredUrl.replace(/\/+$/, '');
 };
 
+const issueAuthCookie = (res: Response, token: string): void => {
+  res.cookie('sb_access_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+};
+
 const signupLookupSelect = Prisma.validator<Prisma.UserSelect>()({
   id: true,
 });
@@ -36,25 +50,22 @@ const loginUserSelect = Prisma.validator<Prisma.UserSelect>()({
 });
 
 const forgotPasswordUserSelect = Prisma.validator<Prisma.UserSelect>()({
+  id: true,
   email: true,
 });
 
-// ─── POST /api/auth/signup ────────────────────────────────────────────────────
 export const signup = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const name = sanitizeName(req.body?.name);
 
-    if (!email || !password) {
-      res.status(400).json({ message: 'Email and password are required' });
-      return;
-    }
-
-    if (password.length < 8) {
-      res.status(400).json({ message: 'Password must be at least 8 characters' });
+    if (!isValidEmail(email) || !isValidPassword(password)) {
+      res.status(400).json({ message: 'A valid email and a password with at least 8 characters are required' });
       return;
     }
 
@@ -75,8 +86,8 @@ export const signup = async (
     });
 
     const token = generateToken({ userId: user.id, email: user.email, role: user.role });
+    issueAuthCookie(res, token);
 
-    // Send Welcome Email (Non-blocking ideally, but awaited for simplicity here)
     await sendSignupConfirmation(user.email, user.name || 'User').catch((err) => console.error('Email error:', err));
 
     res.status(201).json({
@@ -89,16 +100,16 @@ export const signup = async (
   }
 };
 
-// ─── POST /api/auth/login ────────────────────────────────────────────────────
 export const login = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
-    if (!email || !password) {
+    if (!isValidEmail(email) || !assertNonEmptyString(password)) {
       res.status(400).json({ message: 'Email and password are required' });
       return;
     }
@@ -119,6 +130,7 @@ export const login = async (
     }
 
     const token = generateToken({ userId: user.id, email: user.email, role: user.role });
+    issueAuthCookie(res, token);
 
     res.status(200).json({
       message: 'Login successful',
@@ -136,7 +148,6 @@ export const login = async (
   }
 };
 
-// ─── GET /api/auth/google/callback ────────────────────────────────────────────
 export const googleAuthCallback = async (
   req: Request,
   res: Response,
@@ -151,8 +162,7 @@ export const googleAuthCallback = async (
     }
 
     const token = generateToken({ userId: user.id, email: user.email, role: user.role });
-
-    // Redirect to frontend auth-callback route with the token
+    issueAuthCookie(res, token);
     res.redirect(`${frontendUrl}/auth-callback?token=${encodeURIComponent(token)}`);
   } catch (error) {
     next(error);
@@ -161,13 +171,11 @@ export const googleAuthCallback = async (
 
 export { resolveFrontendUrl };
 
-// ─── POST /api/auth/forgot-password ─────────────────────────────────────────
-
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      res.status(400).json({ message: 'Email is required' });
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!isValidEmail(email)) {
+      res.status(400).json({ message: 'A valid email is required' });
       return;
     }
 
@@ -175,16 +183,25 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       where: { email },
       select: forgotPasswordUserSelect,
     });
+
     if (!user) {
-      // Return 200 anyway to prevent email enumeration
       res.status(200).json({ message: 'If an account exists, a reset link has been sent' });
       return;
     }
 
-    // In a real app, you would create a token in the DB and attach it to the email.
-    // For this stub, we just simulate the flow.
-    const resetToken = `stub_reset_${Date.now()}`;
-    await sendPasswordReset(user.email, resetToken).catch(err => console.error(err));
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+
+    await sendPasswordReset(user.email, rawToken);
 
     res.status(200).json({ message: 'If an account exists, a reset link has been sent' });
   } catch (error) {
@@ -192,24 +209,42 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// ─── POST /api/auth/reset-password ──────────────────────────────────────────
 export const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) {
-      res.status(400).json({ message: 'Token and new password are required' });
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+
+    if (!assertNonEmptyString(token) || !isValidPassword(newPassword)) {
+      res.status(400).json({ message: 'Token and a valid password are required' });
       return;
     }
 
-    // Since this is a stub, we won't verify the DB token, but we would hash the new password and update the user.
-    // In real app, find user by resetToken. For now, just return success if string > 8.
-    if (newPassword.length < 8) {
-      res.status(400).json({ message: 'Password must be at least 8 characters' });
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+
+    if (!user) {
+      res.status(400).json({ message: 'Reset token is invalid or expired' });
       return;
     }
 
-    // Stub: We can't update without knowing the user, so we just acknowledge it.
-    res.status(200).json({ message: 'Password reset successfully (Stub logic executed)' });
+    const hashedPassword = await hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+
+    res.status(200).json({ message: 'Password reset successfully' });
   } catch (error) {
     next(error);
   }

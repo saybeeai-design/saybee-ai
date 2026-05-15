@@ -10,11 +10,15 @@ import {
 
 dotenv.config();
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'stub_client_id';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'stub_client_secret';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 // In production, callbackURL should be an absolute URL like https://api.saybeeai.com/api/auth/google/callback
-const callbackURL = process.env.GOOGLE_CALLBACK_URL || '/api/auth/google/callback';
+const callbackURL = process.env.GOOGLE_CALLBACK_URL;
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !callbackURL) {
+  throw new Error('GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_CALLBACK_URL must be configured');
+}
 
 const googleAuthUserSelect = Prisma.validator<Prisma.UserSelect>()({
   id: true,

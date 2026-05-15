@@ -6,25 +6,38 @@ export interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
 }
 
+const parseCookies = (cookieHeader?: string): Record<string, string> => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
+    const [rawKey, ...rest] = part.trim().split('=');
+    if (!rawKey || rest.length === 0) return acc;
+    acc[rawKey] = decodeURIComponent(rest.join('='));
+    return acc;
+  }, {});
+};
+
 export const protect = (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void => {
   const authHeader = req.headers.authorization;
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieToken = cookies.sb_access_token;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  const token = headerToken || cookieToken;
+
+  if (!token) {
     res.status(401).json({ message: 'Not authorized, no token provided' });
     return;
   }
-
-  const token = authHeader.split(' ')[1];
 
   try {
     const decoded = verifyToken(token);
     req.user = decoded;
     next();
-  } catch (error) {
+  } catch {
     res.status(401).json({ message: 'Not authorized, token is invalid or expired' });
   }
 };

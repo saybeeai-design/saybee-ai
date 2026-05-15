@@ -63,6 +63,8 @@ const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const resumeRoutes_1 = __importDefault(require("./routes/resumeRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 const dbService_1 = require("./services/dbService");
+const requestContextMiddleware_1 = require("./middlewares/requestContextMiddleware");
+const logger_1 = require("./utils/logger");
 Sentry.init({
     dsn: process.env.SENTRY_DSN || undefined,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
@@ -107,32 +109,33 @@ if (process.env.NODE_ENV === 'production') {
         }
     }
 }
-const optionalEnvGroups = [
+const requiredProductionEnvGroups = [
     {
         name: 'Google OAuth',
         keys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL'],
-        fallback: 'Google sign-in will remain disabled until all required OAuth variables are set.',
     },
     {
         name: 'Razorpay',
-        keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'],
-        fallback: 'Payment routes will run in stub mode until both variables are set.',
+        keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'],
     },
     {
         name: 'SMTP',
-        keys: ['SMTP_USER', 'SMTP_PASS'],
-        fallback: 'Email delivery will run in stub mode until both variables are set.',
+        keys: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'],
+    },
+    {
+        name: 'Storage',
+        keys: ['AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_BUCKET_NAME'],
+    },
+    {
+        name: 'AI Speech',
+        keys: ['OPENAI_API_KEY', 'GOOGLE_TTS_API_KEY'],
     },
 ];
-for (const { name, keys, fallback } of optionalEnvGroups) {
+for (const { name, keys } of requiredProductionEnvGroups) {
     const configuredKeys = keys.filter((key) => Boolean(process.env[key]));
-    if (configuredKeys.length === 0) {
-        console.warn(`[Config] ${name} is not configured. ${fallback}`);
-        continue;
-    }
-    if (configuredKeys.length !== keys.length) {
+    if (process.env.NODE_ENV === 'production' && configuredKeys.length !== keys.length) {
         const missingKeys = keys.filter((key) => !process.env[key]);
-        console.error(`[Config] ${name} is partially configured. Missing: ${missingKeys.join(', ')}`);
+        console.error(`[Config] ${name} is missing required variables in production: ${missingKeys.join(', ')}`);
         process.exit(1);
     }
 }
@@ -148,6 +151,7 @@ if (process.env.CORS_ORIGIN) {
 const app = (0, express_1.default)();
 // Render forwards the client IP through a proxy, so trust the first hop.
 app.set('trust proxy', 1);
+app.use('/api/payments/webhook', express_1.default.raw({ type: 'application/json' }));
 app.use((0, cors_1.default)({
     origin: process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(',')
@@ -155,10 +159,24 @@ app.use((0, cors_1.default)({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+app.use(requestContextMiddleware_1.requestContext);
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use(passport_1.default.initialize());
 app.use((0, helmet_1.default)());
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        logger_1.logger.info('request.completed', {
+            durationMs: Date.now() - start,
+            method: req.method,
+            path: req.originalUrl,
+            requestId: req.requestId,
+            statusCode: res.statusCode,
+        });
+    });
+    next();
+});
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
     max: 150,

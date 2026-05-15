@@ -126,7 +126,7 @@ Premium Features Added:
 
 ### Finding Past Conversations
 
-**BEFORE:**
+**BEFORE:*
 ❌ No history tracking
 ❌ Once you leave the chat, conversation lost
 ❌ No way to recover

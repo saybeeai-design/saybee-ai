@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { isAxiosError } from 'axios';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
@@ -32,8 +33,11 @@ export default function SignupPage() {
       setAuth(res.data.token, res.data.user);
       toast.success('Account created! Welcome to SayBee AI 🎉');
       router.push('/dashboard');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Signup failed');
+    } catch (err: unknown) {
+      const message = isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message || 'Signup failed'
+        : 'Signup failed';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

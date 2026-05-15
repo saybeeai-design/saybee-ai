@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/globalStore';
-import { Brain, LayoutDashboard, Users, Tag, BarChart3, LogOut, ChevronRight, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Users, Tag, BarChart3, LogOut, ChevronRight, DollarSign } from 'lucide-react';
 import Image from 'next/image';
 
 const nav = [

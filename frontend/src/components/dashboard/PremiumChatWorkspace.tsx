@@ -10,15 +10,12 @@ import {
   Copy,
   Mic,
   Plus,
-  Settings,
   File,
   Send,
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Clock,
   Trash2,
-  MoreHorizontal,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -54,10 +51,6 @@ interface ChatApiResponse {
 }
 
 const STORAGE_KEY = 'saybeeai-chat-sessions';
-const MESSAGE_GAP = 16;
-const OVERSCAN_PX = 560;
-const DEFAULT_USER_HEIGHT = 92;
-const DEFAULT_ASSISTANT_HEIGHT = 136;
 
 const AI_MODES = {
   general: {
@@ -222,12 +215,10 @@ function MessageBubble({
   copied,
   message,
   onCopy,
-  onRetry,
 }: {
   copied: boolean;
   message: Message;
   onCopy: (message: Message) => void;
-  onRetry?: () => void;
 }) {
   const isAssistant = message.role === 'assistant';
 
@@ -500,10 +491,17 @@ export default function PremiumChatWorkspace() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [requestState, setRequestState] = useState<RequestState>('idle');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as ChatSession[]) : [];
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
+  });
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -517,19 +515,6 @@ export default function PremiumChatWorkspace() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const unmountedRef = useRef(false);
   const shouldStickToBottomRef = useRef(true);
-
-  // Load sessions from storage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as ChatSession[];
-        setSessions(parsed);
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
 
   // Save sessions to storage
   useEffect(() => {
@@ -550,13 +535,9 @@ export default function PremiumChatWorkspace() {
     const container = containerRef.current;
     if (!container) return;
 
-    const nextScrollTop = container.scrollTop;
-    const nextViewportHeight = container.clientHeight;
     const distanceFromBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
     const isNearBottom = distanceFromBottom < 140;
 
-    setScrollTop(nextScrollTop);
-    setViewportHeight(nextViewportHeight);
     setShowScrollButton(!isNearBottom);
     shouldStickToBottomRef.current = isNearBottom;
   };
@@ -661,8 +642,8 @@ export default function PremiumChatWorkspace() {
       }
 
       await streamAssistantMessage(replyText);
-    } catch (error) {
-      console.error('Chat error:', error);
+    } catch {
+      console.error('Chat error');
       setRequestState('idle');
       toast.error('AI is temporarily unavailable');
     }
@@ -744,7 +725,7 @@ export default function PremiumChatWorkspace() {
       await voiceRecorderRef.current.startRecording();
       setIsRecording(true);
       toast.success('Recording started');
-    } catch (error) {
+    } catch {
       toast.error('Microphone access denied');
     }
   };
@@ -767,7 +748,7 @@ export default function PremiumChatWorkspace() {
       } else {
         toast.error('Could not transcribe audio');
       }
-    } catch (error) {
+    } catch {
       toast.error('Voice recording failed');
       setIsRecording(false);
     }
@@ -790,7 +771,7 @@ export default function PremiumChatWorkspace() {
       setUploadProgress(0);
       toast.loading('Uploading file...');
 
-      const { fileUrl, fileId } = await uploadFile(file, (progress) => {
+      const { fileUrl } = await uploadFile(file, (progress) => {
         setUploadProgress(progress);
       });
 
@@ -803,7 +784,7 @@ export default function PremiumChatWorkspace() {
         (prev) =>
           `${prev}\n[File: ${file.name}](${fileUrl})`
       );
-    } catch (error) {
+    } catch {
       toast.dismiss();
       toast.error('File upload failed');
     }

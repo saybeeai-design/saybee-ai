@@ -3,15 +3,14 @@ import { useAuthStore } from '@/store/globalStore';
 import { 
   User, 
   Lock, 
-  Shield, 
   Settings as SettingsIcon, 
   Languages, 
-  BarChart, 
   CreditCard, 
   Trash2,
   Save
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { ComponentType } from 'react';
 
 interface SettingField {
   label: string;
@@ -25,7 +24,7 @@ interface SettingSection {
   id: string;
   title: string;
   description: string;
-  icon: any;
+  icon: ComponentType<{ className?: string }>;
   fields: SettingField[];
   action?: { label: string; color: string };
 }

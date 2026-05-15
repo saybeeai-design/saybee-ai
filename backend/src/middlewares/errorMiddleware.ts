@@ -8,10 +8,12 @@ import {
   getDatabaseErrorMessage,
   isSchemaMismatchDatabaseError,
 } from '../utils/databaseErrors';
+import { logger } from '../utils/logger';
+import { RequestWithContext } from './requestContextMiddleware';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-export const errorHandler = (err: unknown, _req: Request, res: Response, next: NextFunction) => {
+export const errorHandler = (err: unknown, req: RequestWithContext, res: Response, next: NextFunction) => {
   if (res.headersSent) {
     next(err as any);
     return;
@@ -30,7 +32,10 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, next: N
 
   if (isSchemaMismatchDatabaseError(err)) {
     markDatabaseUnhealthy(err);
-    console.error(`[DB] Schema mismatch detected: ${getDatabaseErrorMessage(err)}`);
+    logger.error('db.schema_mismatch', {
+      message: getDatabaseErrorMessage(err),
+      requestId: req.requestId,
+    });
 
     res.status(503).json({
       code: 'DATABASE_SCHEMA_MISMATCH',
@@ -45,9 +50,14 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, next: N
 
   res.status(statusCode);
 
-  console.error(`[Error] ${error.message}`);
+  logger.error('request.failed', {
+    message: error.message,
+    requestId: req.requestId,
+    stack: isProduction ? undefined : error.stack,
+  });
 
   res.json({
+    requestId: req.requestId,
     message: statusCode >= 500 && isProduction ? 'Internal Server Error' : error.message,
     stack: isProduction ? null : error.stack ?? null,
   });

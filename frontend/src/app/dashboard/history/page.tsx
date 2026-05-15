@@ -2,10 +2,20 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { interviewAPI } from '@/lib/api';
-import { VideoIcon, Clock, CheckCircle, XCircle, ChevronRight } from 'lucide-react';
+import { VideoIcon, Clock, CheckCircle, XCircle, ChevronRight, type LucideIcon } from 'lucide-react';
+
+interface InterviewHistoryItem {
+  id: string;
+  category: string;
+  language: string;
+  status: string;
+  score: number | null;
+  createdAt: string;
+  _count?: { questions?: number };
+}
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { color: string; icon: any; label: string }> = {
+  const map: Record<string, { color: string; icon: LucideIcon; label: string }> = {
     COMPLETED: { color: '#22d3a0', icon: CheckCircle, label: 'Completed' },
     IN_PROGRESS: { color: '#fbbf24', icon: Clock, label: 'In Progress' },
     PENDING: { color: '#8888aa', icon: Clock, label: 'Pending' },
@@ -21,7 +31,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function HistoryPage() {
-  const [interviews, setInterviews] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<InterviewHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,7 +54,7 @@ export default function HistoryPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {interviews.map((interview: any) => (
+            {interviews.map((interview) => (
               <Link key={interview.id} href={`/dashboard/reports?id=${interview.id}`}
                 className="flex items-center gap-4 p-4 rounded-xl transition-colors hover:bg-white/5 group"
                 style={{ border: '1px solid rgba(255,255,255,0.06)' }}>

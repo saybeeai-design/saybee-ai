@@ -47,10 +47,6 @@ export default function PremiumPricingWorkspace() {
     try {
       const { data } = await paymentAPI.createOrder(planId);
 
-      if (data.stub) {
-        throw new Error('Payments are still in stub mode on the server. Restart the backend after updating Razorpay credentials.');
-      }
-
       await openRazorpayCheckout({
         amount: data.amount,
         currency: data.currency,

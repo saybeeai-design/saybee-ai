@@ -8,7 +8,18 @@ import {
 import { protect } from '../middlewares/authMiddleware';
 
 const router = Router();
-const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedAudioTypes = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+    if (allowedAudioTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only WAV, MP3, WEBM, MP4, or OGG audio files are allowed'));
+    }
+  },
+});
 const fileUpload = multer({ 
   storage: multer.memoryStorage(), 
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -27,7 +38,7 @@ router.use(protect as RequestHandler);
 // POST /api/ai/transcribe  — Upload audio file → get text transcript (Whisper)
 router.post('/transcribe', audioUpload.single('audio'), transcribeAudioFile as unknown as RequestHandler);
 
-// POST /api/ai/speak       — Text → speech audio (Google TTS / stub)
+// POST /api/ai/speak       — Text → speech audio
 router.post('/speak', speakText as unknown as RequestHandler);
 
 // POST /api/ai/upload      — Upload files for chat

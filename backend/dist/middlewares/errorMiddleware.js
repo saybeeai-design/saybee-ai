@@ -3,8 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.notFound = exports.errorHandler = void 0;
 const dbService_1 = require("../services/dbService");
 const databaseErrors_1 = require("../utils/databaseErrors");
+const logger_1 = require("../utils/logger");
 const isProduction = process.env.NODE_ENV === 'production';
-const errorHandler = (err, _req, res, next) => {
+const errorHandler = (err, req, res, next) => {
     var _a;
     if (res.headersSent) {
         next(err);
@@ -21,7 +22,10 @@ const errorHandler = (err, _req, res, next) => {
     }
     if ((0, databaseErrors_1.isSchemaMismatchDatabaseError)(err)) {
         (0, dbService_1.markDatabaseUnhealthy)(err);
-        console.error(`[DB] Schema mismatch detected: ${(0, databaseErrors_1.getDatabaseErrorMessage)(err)}`);
+        logger_1.logger.error('db.schema_mismatch', {
+            message: (0, databaseErrors_1.getDatabaseErrorMessage)(err),
+            requestId: req.requestId,
+        });
         res.status(503).json({
             code: 'DATABASE_SCHEMA_MISMATCH',
             message: 'Database schema is out of date for the current backend release. Apply Prisma schema changes and retry.',
@@ -31,8 +35,13 @@ const errorHandler = (err, _req, res, next) => {
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
     const error = err instanceof Error ? err : new Error('Internal Server Error');
     res.status(statusCode);
-    console.error(`[Error] ${error.message}`);
+    logger_1.logger.error('request.failed', {
+        message: error.message,
+        requestId: req.requestId,
+        stack: isProduction ? undefined : error.stack,
+    });
     res.json({
+        requestId: req.requestId,
         message: statusCode >= 500 && isProduction ? 'Internal Server Error' : error.message,
         stack: isProduction ? null : (_a = error.stack) !== null && _a !== void 0 ? _a : null,
     });

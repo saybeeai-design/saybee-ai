@@ -231,7 +231,7 @@ export const transcribeAudioFile = async (
       return;
     }
 
-    const result = await transcribeBuffer(req.file.buffer, req.file.mimetype);
+    const result = await transcribeBuffer(req.file.buffer);
 
     res.status(200).json({
       message: 'Transcription complete',
@@ -521,60 +521,6 @@ export const uploadChatFile = async (
       fileId: req.file.originalname,
       fileName: req.file.originalname,
       fileSize: req.file.size,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-      if (!isFollowUp) {
-        // ── Follow-up cap reached — generate fresh main question ─────────────
-        try {
-          generatedQuestion = await generateInterviewQuestion({
-            interviewConfig,
-            previousQuestions,
-            resumeSummary,
-            stage: nextStage,
-          });
-        } catch (err: any) {
-          console.error('[Question] New question generation failed, using fallback:', err);
-        }
-      }
-
-      nextQuestion = await prisma.question.create({
-        data: {
-          interviewId,
-          content: generatedQuestion.question,
-          order: totalAsked + 1,
-        },
-      });
-      nextQuestionMeta = generatedQuestion;
-
-      // ── 5. Speak the next question ──────────────────────────────────────────
-      if (speakNextQuestion) {
-        const langCode = getLanguageCode(currentInterview!.language);
-        tts = await textToSpeech(generatedQuestion.question, langCode);
-      }
-    } else {
-      interviewDone = true;
-    }
-
-
-    res.status(200).json({
-      answeredQuestion: {
-        id: question.id,
-        content: question.content,
-        stage,
-      },
-      evaluation: feedback,
-      evaluatedAnswer,
-      nextQuestion,
-      nextQuestionMeta,
-      tts,
-      interviewDone,
-      message: interviewDone
-        ? 'All questions answered. Call /finish to complete the interview.'
-        : 'Answer saved and next question generated.',
     });
   } catch (error) {
     next(error);

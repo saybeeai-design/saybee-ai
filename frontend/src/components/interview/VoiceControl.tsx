@@ -20,7 +20,7 @@ const VoiceControl = ({ isListening, onToggle, audioLevel = 0 }: VoiceControlPro
                 key={i}
                 initial={{ height: 4 }}
                 animate={{ 
-                  height: [4, (8 + Math.random() * 32) * (0.5 + audioLevel), 4] 
+                  height: [4, (10 + (i % 6) * 4) * (0.5 + audioLevel), 4] 
                 }}
                 transition={{
                   duration: 0.4,

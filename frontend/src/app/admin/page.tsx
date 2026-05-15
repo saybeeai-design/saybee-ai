@@ -4,8 +4,15 @@ import api from '@/lib/api';
 import { Users, Video, Brain, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface MetricsResponse {
+  users: number;
+  interviews: number;
+  resumes: number;
+  aiUsage: { generatedQuestions: number };
+}
+
 export default function AdminDashboardPage() {
-  const [metrics, setMetrics] = useState<any>(null);
+  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,7 +20,7 @@ export default function AdminDashboardPage() {
       try {
         const res = await api.get('/admin/metrics');
         setMetrics(res.data);
-      } catch (err: any) {
+      } catch {
         toast.error('Failed to load metrics');
       } finally {
         setLoading(false);

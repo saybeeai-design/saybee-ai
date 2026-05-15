@@ -3,9 +3,23 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { User, Shield, Briefcase, FileText } from 'lucide-react';
+import { isAxiosError } from 'axios';
+
+interface AdminUser {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  credits: number;
+  isPaid: boolean;
+  createdAt: string;
+  _count?: { interviews?: number; resumes?: number };
+}
+
+type AdminAction = 'delete' | 'ban' | 'mark-paid' | 'add-credits';
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,22 +27,22 @@ export default function AdminUsersPage() {
       try {
         const res = await api.get('/admin/users');
         setUsers(res.data.users);
-      } catch (err) {
-        toast.error('Failed to load users');
-      } finally {
+    } catch {
+      toast.error('Failed to load users');
+    } finally {
         setLoading(false);
       }
     };
     fetchUsers();
   }, []);
 
-  const handleAction = async (userId: string, action: string, amount?: number) => {
+  const handleAction = async (userId: string, action: AdminAction, amount?: number) => {
     try {
       if (action === 'delete' && !confirm('Are you sure you want to delete this user?')) return;
       
       let url = `/admin/users/${userId}`;
       let method = 'post';
-      let data: any = {};
+      let data: Record<string, number> = {};
 
       if (action === 'delete') {
         method = 'delete';
@@ -47,8 +61,11 @@ export default function AdminUsersPage() {
       // Refresh list
       const res = await api.get('/admin/users');
       setUsers(res.data.users);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || `Failed to perform ${action}`);
+    } catch (err: unknown) {
+      const message = isAxiosError<{ message?: string }>(err)
+        ? err.response?.data?.message || `Failed to perform ${action}`
+        : `Failed to perform ${action}`;
+      toast.error(message);
     }
   };
 

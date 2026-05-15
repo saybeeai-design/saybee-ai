@@ -17,24 +17,12 @@ exports.transcribeBuffer = transcribeBuffer;
 const fs_1 = __importDefault(require("fs"));
 const form_data_1 = __importDefault(require("form-data"));
 const node_fetch_1 = __importDefault(require("node-fetch"));
-/**
- * Transcribes an audio file using the OpenAI Whisper API.
- * The audio file should be in a supported format: mp3, mp4, mpeg, mpga, m4a, wav, or webm.
- *
- * Falls back to a stub response if OPENAI_API_KEY is not configured.
- */
 function transcribeAudio(audioFilePath) {
     return __awaiter(this, void 0, void 0, function* () {
         const apiKey = process.env.OPENAI_API_KEY;
-        // ── Stub mode (no API key configured) ────────────────────────────────────────
         if (!apiKey) {
-            console.warn('[SpeechToText] No OPENAI_API_KEY found — returning stub transcription');
-            return {
-                text: '[Speech-to-Text stub: configure OPENAI_API_KEY to enable real transcription]',
-                language: 'en',
-            };
+            throw new Error('OPENAI_API_KEY is not configured');
         }
-        // ── Real Whisper transcription ────────────────────────────────────────────────
         if (!fs_1.default.existsSync(audioFilePath)) {
             throw new Error(`Audio file not found: ${audioFilePath}`);
         }
@@ -62,19 +50,15 @@ function transcribeAudio(audioFilePath) {
         };
     });
 }
-/**
- * Transcribes audio from a raw Buffer (e.g. from a multer upload)
- * by writing it to a temp file first.
- */
-function transcribeBuffer(buffer_1) {
-    return __awaiter(this, arguments, void 0, function* (buffer, mimeType = 'audio/wav') {
+function transcribeBuffer(buffer) {
+    return __awaiter(this, void 0, void 0, function* () {
         const tmpPath = `/tmp/saybeeai-audio-${Date.now()}.wav`;
         fs_1.default.writeFileSync(tmpPath, buffer);
         try {
             return yield transcribeAudio(tmpPath);
         }
         finally {
-            fs_1.default.unlink(tmpPath, () => { }); // cleanup
+            fs_1.default.unlink(tmpPath, () => { });
         }
     });
 }

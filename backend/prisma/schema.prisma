@@ -21,6 +21,8 @@ model User {
   // Google OAuth support
   googleId         String?        @unique
   provider         String         @default("LOCAL")
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
   
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -114,12 +116,14 @@ model PaymentRecord {
   processedAt  DateTime  @default(now())
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  eventId      String?
   userId       String?
   user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([email])
   @@index([status])
+  @@unique([eventId, provider])
 }
 
 model Coupon {

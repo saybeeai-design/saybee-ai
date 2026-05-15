@@ -8,7 +8,9 @@
     "prebuild": "node scripts/clean-dist.js",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "test": "npm run build && node --test tests/**/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -49,7 +51,9 @@
     "@types/node-fetch": "^2.6.13",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.17",
+    "@types/supertest": "^6.0.3",
     "prisma": "^5.22.0",
+    "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

@@ -1,10 +1,12 @@
 import { Router, RequestHandler } from 'express';
-import { createOrder, verifyPayment, getBillingHistory } from '../controllers/paymentController';
+import { createOrder, verifyPayment, getBillingHistory, webhookPayment } from '../controllers/paymentController';
 import { protect } from '../middlewares/authMiddleware';
 
 const router = Router();
 
-// All payment routes require authentication
+router.post('/webhook', webhookPayment as unknown as RequestHandler);
+
+// All remaining payment routes require authentication
 router.use(protect as RequestHandler);
 
 // POST /api/payments/create-order  → Razorpay order creation

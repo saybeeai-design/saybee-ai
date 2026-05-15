@@ -16,8 +16,8 @@ exports.finishInterview = exports.listInterviews = exports.getInterview = export
 const db_1 = __importDefault(require("../config/db"));
 const emailService_1 = require("../services/emailService");
 const evaluationService_1 = require("../services/ai/evaluationService");
-const geminiClient_1 = require("../services/ai/geminiClient");
-const geminiService_1 = require("../services/ai/geminiService");
+const promptBuilder_1 = require("../services/ai/promptBuilder");
+const questionService_1 = require("../services/ai/questionService");
 // Interview stages in order
 exports.INTERVIEW_STAGES = [
     'Introduction',
@@ -26,19 +26,41 @@ exports.INTERVIEW_STAGES = [
     'HR',
     'Closing',
 ];
-const FIRST_QUESTION_FALLBACK = geminiClient_1.GEMINI_FALLBACK_RESPONSE.data.message;
+function safeParseEvaluation(value) {
+    if (typeof value !== 'string') {
+        return value !== null && value !== void 0 ? value : null;
+    }
+    try {
+        return JSON.parse(value);
+    }
+    catch (_a) {
+        return value;
+    }
+}
 // ─── POST /api/interviews/start ───────────────────────────────────────────────
 const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         if (!userId) {
             res.status(401).json({ message: 'Unauthorized' });
             return;
         }
-        const { resumeId, category, language } = req.body;
+        const resumeId = typeof req.body.resume === 'string' && req.body.resume.trim()
+            ? req.body.resume.trim()
+            : typeof req.body.resumeId === 'string'
+                ? req.body.resumeId.trim()
+                : '';
+        const interviewConfig = (0, promptBuilder_1.normalizeInterviewConfig)({
+            category: typeof req.body.category === 'string' ? req.body.category.trim() : '',
+            customRole: typeof req.body.customRole === 'string' ? req.body.customRole.trim() : '',
+            language: typeof req.body.language === 'string' ? req.body.language.trim() : '',
+            role: typeof req.body.role === 'string' ? req.body.role.trim() : '',
+            subRole: typeof req.body.subRole === 'string' ? req.body.subRole.trim() : '',
+        });
+        const category = interviewConfig.category;
         if (!resumeId || !category) {
-            res.status(400).json({ message: 'resumeId and category are required' });
+            res.status(400).json({ message: 'resume/category information is required' });
             return;
         }
         // Check Credits
@@ -62,7 +84,10 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
                 userId,
                 resumeId,
                 category,
-                language: language || 'English',
+                language: interviewConfig.language,
+                reportData: {
+                    interviewConfig,
+                },
                 status: 'IN_PROGRESS',
                 // Store current stage in a JSON metadata field — we use the existing
                 // data model's JSON-compatible approach via the score field being nullable
@@ -79,10 +104,18 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
             data: { credits: { decrement: 1 } },
         });
         // Generate the first question immediately
-        const resumeContext = ((_b = resume.parsedData) === null || _b === void 0 ? void 0 : _b.summary) || `Candidate applying for ${category}`;
-        let firstQuestionContent = FIRST_QUESTION_FALLBACK;
+        const resumeContext = (0, promptBuilder_1.extractResumeContext)(resume.parsedData, resume.fileName, category);
+        let firstQuestionMeta = (0, questionService_1.buildQuestionFallback)({
+            interviewConfig,
+            stage: exports.INTERVIEW_STAGES[0],
+        });
         try {
-            firstQuestionContent = yield (0, geminiService_1.generateInterviewQuestion)(resumeContext);
+            firstQuestionMeta = yield (0, questionService_1.generateInterviewQuestion)({
+                interviewConfig,
+                previousQuestions: [],
+                resumeSummary: resumeContext,
+                stage: exports.INTERVIEW_STAGES[0],
+            });
         }
         catch (error) {
             console.error('[Interview Start] Failed to generate the first AI question, using fallback:', error);
@@ -90,13 +123,14 @@ const startInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         const firstQuestion = yield db_1.default.question.create({
             data: {
                 interviewId: interview.id,
-                content: firstQuestionContent,
+                content: firstQuestionMeta.question,
                 order: 1,
             },
         });
         res.status(201).json({
             message: 'Interview session started',
-            interview: Object.assign(Object.assign({}, interview), { currentStage: exports.INTERVIEW_STAGES[0], totalStages: exports.INTERVIEW_STAGES.length, firstQuestion }),
+            interview: Object.assign(Object.assign({}, interview), { currentStage: exports.INTERVIEW_STAGES[0], totalStages: exports.INTERVIEW_STAGES.length, firstQuestion,
+                firstQuestionMeta }),
         });
     }
     catch (error) {
@@ -129,7 +163,7 @@ const getInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
         const answeredCount = interview.questions.filter((q) => q.answer !== null).length;
         const stageIndex = Math.min(Math.floor(answeredCount / 2), // ~2 questions per stage
         exports.INTERVIEW_STAGES.length - 1);
-        const result = Object.assign(Object.assign({}, interview), { questions: interview.questions.map(q => (Object.assign(Object.assign({}, q), { answer: q.answer ? Object.assign(Object.assign({}, q.answer), { evaluation: q.answer.evaluation ? JSON.parse(q.answer.evaluation) : null }) : null }))) });
+        const result = Object.assign(Object.assign({}, interview), { questions: interview.questions.map(q => (Object.assign(Object.assign({}, q), { answer: q.answer ? Object.assign(Object.assign({}, q.answer), { evaluation: safeParseEvaluation(q.answer.evaluation) }) : null }))) });
         res.status(200).json({
             interview: Object.assign(Object.assign({}, result), { currentStage: exports.INTERVIEW_STAGES[stageIndex], stageIndex, totalStages: exports.INTERVIEW_STAGES.length, answeredCount }),
         });
@@ -197,7 +231,7 @@ const finishInterview = (req, res, next) => __awaiter(void 0, void 0, void 0, fu
             .map((q, idx) => {
             var _a, _b, _c;
             const ans = (_b = (_a = q.answer) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : '(No answer)';
-            const evaluation = ((_c = q.answer) === null || _c === void 0 ? void 0 : _c.evaluation) ? JSON.parse(q.answer.evaluation) : null;
+            const evaluation = safeParseEvaluation((_c = q.answer) === null || _c === void 0 ? void 0 : _c.evaluation);
             return `Q${idx + 1} [${q.content}]\nA: ${ans}\nEvaluation: ${JSON.stringify(evaluation)}`;
         })
             .join('\n\n');
