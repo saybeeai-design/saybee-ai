@@ -49,35 +49,68 @@ const setCachedGeminiResponse = (prompt: string, value: string): void => {
   });
 };
 
-export function getGeminiApiKey(): string {
-  const apiKey = (process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY)?.trim();
+type GeminiProvider = 'google' | 'openrouter';
+
+function getConfiguredProvider(): GeminiProvider {
+  const provider = process.env.GEMINI_PROVIDER?.trim().toLowerCase();
+
+  if (provider === 'openrouter') {
+    return 'openrouter';
+  }
+
+  if (provider === 'google') {
+    return 'google';
+  }
+
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (openRouterKey || geminiKey?.startsWith('sk-or-')) {
+    return 'openrouter';
+  }
+
+  return 'google';
+}
+
+function getGoogleGeminiApiKey(): string {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
     throw new Error(
-      'Missing GEMINI_API_KEY. Set GEMINI_API_KEY or OPENROUTER_API_KEY in the backend environment before calling Gemini.'
+      'Missing GEMINI_API_KEY. Set GEMINI_API_KEY in the backend environment before calling Google Gemini.'
     );
   }
 
   return apiKey;
 }
 
+function getOpenRouterApiKey(): string {
+  const apiKey = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY)?.trim();
+
+  if (!apiKey) {
+    throw new Error(
+      'Missing OPENROUTER_API_KEY. Set OPENROUTER_API_KEY or an OpenRouter sk-or-* GEMINI_API_KEY before calling OpenRouter.'
+    );
+  }
+
+  if (!apiKey.startsWith('sk-or-')) {
+    throw new Error('OpenRouter provider is selected, but the configured API key is not an sk-or-* key.');
+  }
+
+  return apiKey;
+}
+
+export function getGeminiApiKey(): string {
+  return getConfiguredProvider() === 'openrouter' ? getOpenRouterApiKey() : getGoogleGeminiApiKey();
+}
+
 function shouldUseOpenRouter(): boolean {
-  const provider = process.env.GEMINI_PROVIDER?.trim().toLowerCase();
-
-  if (provider === 'openrouter') {
-    return true;
-  }
-
-  if (provider === 'google') {
-    return false;
-  }
-
-  return getGeminiApiKey().startsWith('sk-or-') || Boolean(process.env.OPENROUTER_API_KEY);
+  return getConfiguredProvider() === 'openrouter';
 }
 
 export function getGeminiClient(): GoogleGenerativeAI {
   if (!genAI) {
-    genAI = new GoogleGenerativeAI(getGeminiApiKey());
+    genAI = new GoogleGenerativeAI(getGoogleGeminiApiKey());
   }
   return genAI;
 }
@@ -85,7 +118,7 @@ export function getGeminiClient(): GoogleGenerativeAI {
 export function getOpenRouterClient(): OpenAI {
   if (!openRouterClient) {
     openRouterClient = new OpenAI({
-      apiKey: getGeminiApiKey(),
+      apiKey: getOpenRouterApiKey(),
       baseURL: OPENROUTER_BASE_URL,
       timeout: GEMINI_TIMEOUT_MS,
       defaultHeaders: {
