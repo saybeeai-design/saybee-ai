@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger';
 
 export const GEMINI_MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-1.5-flash';
 export const OPENROUTER_GEMINI_MODEL_NAME =
-  process.env.OPENROUTER_GEMINI_MODEL_NAME || 'google/gemini-2.0-flash-001';
+  process.env.OPENROUTER_GEMINI_MODEL_NAME || 'google/gemini-3.1-pro';
 export const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 export const GEMINI_TIMEOUT_MS = 8000;
 export const GEMINI_RETRY_DELAY_MS = 500;
