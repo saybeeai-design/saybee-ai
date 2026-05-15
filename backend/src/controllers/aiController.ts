@@ -13,6 +13,7 @@ import {
 } from '../services/ai/questionService';
 import { transcribeBuffer } from '../services/ai/speechToTextService';
 import { textToSpeech, getLanguageCode } from '../services/ai/textToSpeechService';
+import { aiFailure, aiSuccess } from '../services/aiService';
 import { INTERVIEW_STAGES } from './interviewController';
 
 const MAX_FOLLOW_UPS = 2; // Maximum follow-ups per main question before advancing
@@ -227,14 +228,14 @@ export const transcribeAudioFile = async (
 ): Promise<void> => {
   try {
     if (!req.file) {
-      res.status(400).json({ message: 'No audio file provided' });
+      res.status(400).json(aiFailure('No audio file provided'));
       return;
     }
 
     const result = await transcribeBuffer(req.file.buffer);
 
     res.status(200).json({
-      message: 'Transcription complete',
+      ...aiSuccess({ transcription: result }),
       transcription: result,
     });
   } catch (error) {
@@ -254,7 +255,7 @@ export const speakText = async (
     const { text, language = 'English' } = req.body;
 
     if (!text || text.trim().length === 0) {
-      res.status(400).json({ message: 'text is required' });
+      res.status(400).json(aiFailure('text is required'));
       return;
     }
 
@@ -262,7 +263,7 @@ export const speakText = async (
     const result = await textToSpeech(text, langCode);
 
     res.status(200).json({
-      message: 'Text-to-speech conversion complete',
+      ...aiSuccess({ tts: result }),
       tts: result,
     });
   } catch (error) {
@@ -504,7 +505,7 @@ export const uploadChatFile = async (
 ): Promise<void> => {
   try {
     if (!req.file) {
-      res.status(400).json({ message: 'No file uploaded' });
+      res.status(400).json(aiFailure('No file uploaded'));
       return;
     }
 
@@ -516,7 +517,12 @@ export const uploadChatFile = async (
     );
 
     res.status(200).json({
-      success: true,
+      ...aiSuccess({
+        fileUrl,
+        fileId: req.file.originalname,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+      }),
       fileUrl,
       fileId: req.file.originalname,
       fileName: req.file.originalname,

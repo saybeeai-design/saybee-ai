@@ -1,6 +1,11 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import OpenAI from 'openai';
+import { logger } from '../../utils/logger';
 
-export const GEMINI_MODEL_NAME = 'gemini-1.5-flash';
+export const GEMINI_MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-1.5-flash';
+export const OPENROUTER_GEMINI_MODEL_NAME =
+  process.env.OPENROUTER_GEMINI_MODEL_NAME || 'google/gemini-2.0-flash-001';
+export const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 export const GEMINI_TIMEOUT_MS = 8000;
 export const GEMINI_RETRY_DELAY_MS = 500;
 export const GEMINI_MAX_ATTEMPTS = 2;
@@ -14,6 +19,7 @@ export const GEMINI_FALLBACK_RESPONSE = {
 } as const;
 
 let genAI: GoogleGenerativeAI | null = null;
+let openRouterClient: OpenAI | null = null;
 const geminiPromptCache = new Map<string, { value: string; expiresAt: number }>();
 
 const sleep = (ms: number): Promise<void> =>
@@ -44,15 +50,29 @@ const setCachedGeminiResponse = (prompt: string, value: string): void => {
 };
 
 export function getGeminiApiKey(): string {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY)?.trim();
 
   if (!apiKey) {
     throw new Error(
-      'Missing GEMINI_API_KEY. Set GEMINI_API_KEY in the backend environment before calling Gemini.'
+      'Missing GEMINI_API_KEY. Set GEMINI_API_KEY or OPENROUTER_API_KEY in the backend environment before calling Gemini.'
     );
   }
 
   return apiKey;
+}
+
+function shouldUseOpenRouter(): boolean {
+  const provider = process.env.GEMINI_PROVIDER?.trim().toLowerCase();
+
+  if (provider === 'openrouter') {
+    return true;
+  }
+
+  if (provider === 'google') {
+    return false;
+  }
+
+  return getGeminiApiKey().startsWith('sk-or-') || Boolean(process.env.OPENROUTER_API_KEY);
 }
 
 export function getGeminiClient(): GoogleGenerativeAI {
@@ -60,6 +80,21 @@ export function getGeminiClient(): GoogleGenerativeAI {
     genAI = new GoogleGenerativeAI(getGeminiApiKey());
   }
   return genAI;
+}
+
+export function getOpenRouterClient(): OpenAI {
+  if (!openRouterClient) {
+    openRouterClient = new OpenAI({
+      apiKey: getGeminiApiKey(),
+      baseURL: OPENROUTER_BASE_URL,
+      timeout: GEMINI_TIMEOUT_MS,
+      defaultHeaders: {
+        'HTTP-Referer': process.env.FRONTEND_URL || 'http://localhost:3000',
+        'X-Title': 'SayBee AI',
+      },
+    });
+  }
+  return openRouterClient;
 }
 
 export function getGeminiModel(
@@ -92,7 +127,7 @@ export async function generateGeminiText(
 
   const cachedResponse = getCachedGeminiResponse(prompt);
   if (cachedResponse) {
-    console.info(`[Gemini] ${label} cache hit.`);
+    logger.info('ai.gemini.cache_hit', { label });
     return cachedResponse;
   }
 
@@ -100,9 +135,17 @@ export async function generateGeminiText(
 
   for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const model = getGeminiModel(modelName, timeoutMs);
-      const result = await model.generateContent(prompt, { timeout: timeoutMs });
-      const text = result.response.text().trim();
+      const text = shouldUseOpenRouter()
+        ? await generateOpenRouterGeminiText(trimmedPrompt, {
+            label,
+            modelName: process.env.OPENROUTER_GEMINI_MODEL_NAME || modelName,
+            timeoutMs,
+          })
+        : await generateGoogleGeminiText(trimmedPrompt, {
+            label,
+            modelName,
+            timeoutMs,
+          });
 
       if (!text) {
         throw new Error(`${label} returned an empty response.`);
@@ -114,17 +157,50 @@ export async function generateGeminiText(
       lastError = error;
 
       if (attempt < GEMINI_MAX_ATTEMPTS) {
-        console.warn(
-          `[Gemini] ${label} attempt ${attempt}/${GEMINI_MAX_ATTEMPTS} failed. Retrying in ${GEMINI_RETRY_DELAY_MS}ms.`,
-          error
-        );
+        logger.warn('ai.gemini.retry', {
+          attempt,
+          label,
+          maxAttempts: GEMINI_MAX_ATTEMPTS,
+          retryDelayMs: GEMINI_RETRY_DELAY_MS,
+          error: error instanceof Error ? error.message : String(error),
+        });
         await sleep(GEMINI_RETRY_DELAY_MS);
         continue;
       }
 
-      console.error(`[Gemini] ${label} failed after ${GEMINI_MAX_ATTEMPTS} attempts.`, error);
+      logger.error('ai.gemini.failed', {
+        label,
+        maxAttempts: GEMINI_MAX_ATTEMPTS,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error(`${label} failed.`);
+}
+
+async function generateGoogleGeminiText(
+  prompt: string,
+  options: Required<GenerateGeminiTextOptions>
+): Promise<string> {
+  const model = getGeminiModel(options.modelName, options.timeoutMs);
+  const result = await model.generateContent(prompt, { timeout: options.timeoutMs });
+  return result.response.text().trim();
+}
+
+async function generateOpenRouterGeminiText(
+  prompt: string,
+  options: Required<GenerateGeminiTextOptions>
+): Promise<string> {
+  const modelName =
+    options.modelName === GEMINI_MODEL_NAME ? OPENROUTER_GEMINI_MODEL_NAME : options.modelName;
+  const result = await getOpenRouterClient().chat.completions.create(
+    {
+      model: modelName,
+      messages: [{ role: 'user', content: prompt }],
+    },
+    { timeout: options.timeoutMs }
+  );
+
+  return result.choices[0]?.message?.content?.trim() || '';
 }

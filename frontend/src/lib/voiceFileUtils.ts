@@ -1,6 +1,7 @@
 /**
  * Voice Chat & File Upload Utilities for SayBee AI Premium Chat
  */
+import { getApiBaseUrl } from './backendUrl';
 
 export interface VoiceRecordingState {
   isRecording: boolean;
@@ -82,9 +83,12 @@ export async function speak(text: string): Promise<void> {
 export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.webm');
+  const token = localStorage.getItem('token');
 
-  const response = await fetch('/api/ai/transcribe', {
+  const response = await fetch(`${getApiBaseUrl()}/ai/transcribe`, {
     method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: 'include',
     body: formData,
   });
 
@@ -93,7 +97,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   const data = await response.json();
-  return data.transcript || data.text || '';
+  return data.data?.transcription?.text || data.transcription?.text || data.transcript || data.text || '';
 }
 
 // File Upload (with progress tracking)
@@ -103,6 +107,7 @@ export async function uploadFile(
 ): Promise<{ fileUrl: string; fileId: string }> {
   const formData = new FormData();
   formData.append('file', file);
+  const token = localStorage.getItem('token');
 
   const xhr = new XMLHttpRequest();
 
@@ -117,7 +122,8 @@ export async function uploadFile(
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
-        resolve({ fileUrl: data.fileUrl || '', fileId: data.fileId || data.id || '' });
+        const payload = data.data ?? data;
+        resolve({ fileUrl: payload.fileUrl || '', fileId: payload.fileId || payload.id || '' });
       } else {
         reject(new Error('File upload failed'));
       }
@@ -127,7 +133,11 @@ export async function uploadFile(
       reject(new Error('File upload error'));
     });
 
-    xhr.open('POST', '/api/ai/upload');
+    xhr.open('POST', `${getApiBaseUrl()}/ai/upload`);
+    xhr.withCredentials = true;
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
     xhr.send(formData);
   });
 }

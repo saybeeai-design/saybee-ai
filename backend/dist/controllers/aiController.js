@@ -52,6 +52,7 @@ const promptBuilder_1 = require("../services/ai/promptBuilder");
 const questionService_1 = require("../services/ai/questionService");
 const speechToTextService_1 = require("../services/ai/speechToTextService");
 const textToSpeechService_1 = require("../services/ai/textToSpeechService");
+const aiService_1 = require("../services/aiService");
 const interviewController_1 = require("./interviewController");
 const MAX_FOLLOW_UPS = 2; // Maximum follow-ups per main question before advancing
 const QUESTIONS_PER_STAGE = 2;
@@ -228,14 +229,11 @@ exports.evaluateQuestionAnswer = evaluateQuestionAnswer;
 const transcribeAudioFile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.file) {
-            res.status(400).json({ message: 'No audio file provided' });
+            res.status(400).json((0, aiService_1.aiFailure)('No audio file provided'));
             return;
         }
         const result = yield (0, speechToTextService_1.transcribeBuffer)(req.file.buffer);
-        res.status(200).json({
-            message: 'Transcription complete',
-            transcription: result,
-        });
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ transcription: result })), { transcription: result }));
     }
     catch (error) {
         next(error);
@@ -249,15 +247,12 @@ const speakText = (req, res, next) => __awaiter(void 0, void 0, void 0, function
     try {
         const { text, language = 'English' } = req.body;
         if (!text || text.trim().length === 0) {
-            res.status(400).json({ message: 'text is required' });
+            res.status(400).json((0, aiService_1.aiFailure)('text is required'));
             return;
         }
         const langCode = (0, textToSpeechService_1.getLanguageCode)(language);
         const result = yield (0, textToSpeechService_1.textToSpeech)(text, langCode);
-        res.status(200).json({
-            message: 'Text-to-speech conversion complete',
-            tts: result,
-        });
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ tts: result })), { tts: result }));
     }
     catch (error) {
         next(error);
@@ -467,18 +462,17 @@ exports.nextInterviewTurn = nextInterviewTurn;
 const uploadChatFile = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.file) {
-            res.status(400).json({ message: 'No file uploaded' });
+            res.status(400).json((0, aiService_1.aiFailure)('No file uploaded'));
             return;
         }
         const { uploadFileToCloud } = yield Promise.resolve().then(() => __importStar(require('../services/storageService')));
         const fileUrl = yield uploadFileToCloud(req.file.buffer, req.file.originalname, req.file.mimetype);
-        res.status(200).json({
-            success: true,
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({
             fileUrl,
             fileId: req.file.originalname,
             fileName: req.file.originalname,
             fileSize: req.file.size,
-        });
+        })), { fileUrl, fileId: req.file.originalname, fileName: req.file.originalname, fileSize: req.file.size }));
     }
     catch (error) {
         next(error);

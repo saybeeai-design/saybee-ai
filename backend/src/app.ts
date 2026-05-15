@@ -10,6 +10,7 @@ import adminRoutes from './routes/adminRoutes';
 import aiRoutes from './routes/aiRoutes';
 import answerRoutes from './routes/answerRoutes';
 import authRoutes from './routes/authRoutes';
+import chatRoutes from './routes/chatRoutes';
 import couponRoutes from './routes/couponRoutes';
 import interviewRoutes from './routes/interviewRoutes';
 import paymentRoutes from './routes/paymentRoutes';
@@ -53,13 +54,18 @@ const validateCorsOrigins = (origins: string): void => {
   }
 };
 
-const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'GEMINI_API_KEY'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`Missing required environment variable: ${envVar}`);
     process.exit(1);
   }
+}
+
+if (!process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
+  console.error('Missing required environment variable: GEMINI_API_KEY or OPENROUTER_API_KEY');
+  process.exit(1);
 }
 
 if (process.env.NODE_ENV === 'production') {
@@ -208,6 +214,7 @@ app.use('/api', async (req: Request, _res: Response, next: NextFunction) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/resumes', resumeRoutes);
+app.use('/api/chat', aiLimiter, chatRoutes);
 app.use('/api/interviews', aiLimiter, interviewRoutes);
 app.use('/api/questions', aiLimiter, answerRoutes);
 app.use('/api/ai', aiLimiter, aiRoutes);

@@ -57,6 +57,7 @@ const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
 const answerRoutes_1 = __importDefault(require("./routes/answerRoutes"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const chatRoutes_1 = __importDefault(require("./routes/chatRoutes"));
 const couponRoutes_1 = __importDefault(require("./routes/couponRoutes"));
 const interviewRoutes_1 = __importDefault(require("./routes/interviewRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
@@ -94,12 +95,16 @@ const validateCorsOrigins = (origins) => {
         validateAbsoluteUrl('CORS_ORIGIN', origin);
     }
 };
-const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'GEMINI_API_KEY'];
+const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
 for (const envVar of requiredEnvVars) {
     if (!process.env[envVar]) {
         console.error(`Missing required environment variable: ${envVar}`);
         process.exit(1);
     }
+}
+if (!process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
+    console.error('Missing required environment variable: GEMINI_API_KEY or OPENROUTER_API_KEY');
+    process.exit(1);
 }
 if (process.env.NODE_ENV === 'production') {
     for (const envVar of ['FRONTEND_URL', 'CORS_ORIGIN']) {
@@ -156,6 +161,7 @@ app.use((0, cors_1.default)({
     origin: process.env.CORS_ORIGIN
         ? process.env.CORS_ORIGIN.split(',')
         : ['http://localhost:3000'],
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -229,6 +235,7 @@ app.use('/api', (req, _res, next) => __awaiter(void 0, void 0, void 0, function*
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/users', userRoutes_1.default);
 app.use('/api/resumes', resumeRoutes_1.default);
+app.use('/api/chat', aiLimiter, chatRoutes_1.default);
 app.use('/api/interviews', aiLimiter, interviewRoutes_1.default);
 app.use('/api/questions', aiLimiter, answerRoutes_1.default);
 app.use('/api/ai', aiLimiter, aiRoutes_1.default);

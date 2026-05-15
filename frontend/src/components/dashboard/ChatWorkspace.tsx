@@ -2,12 +2,12 @@
 
 import { startTransition, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import axios from 'axios';
 import { ArrowDown, ArrowUp, Check, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 type RequestState = 'idle' | 'thinking' | 'streaming';
 
@@ -623,7 +623,7 @@ export default function ChatWorkspace() {
     setRequestState('thinking');
 
     try {
-      const response = await axios.post<ChatApiResponse>('/api/chat', {
+      const response = await api.post<ChatApiResponse>('/chat', {
         message: buildPrompt(conversation),
       });
 
@@ -633,11 +633,15 @@ export default function ChatWorkspace() {
         response.data.message?.trim() ??
         '';
 
-      if (response.data.success === false || !replyText) {
+      if (!replyText) {
         setRetryConversation(conversation);
         setRequestState('idle');
         toast.error('AI is temporarily unavailable');
         return;
+      }
+
+      if (response.data.success === false) {
+        toast.error(response.data.error ?? 'AI is temporarily unavailable');
       }
 
       await streamAssistantMessage(replyText);

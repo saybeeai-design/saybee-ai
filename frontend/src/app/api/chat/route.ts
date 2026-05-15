@@ -1,28 +1,34 @@
-import { createChatFallbackResponse, generateChatReply } from '@/lib/server/geminiChatService';
+import { getApiBaseUrl } from '@/lib/backendUrl';
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { message?: unknown };
-    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    const body = await req.json();
+    const response = await fetch(`${getApiBaseUrl()}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(req.headers.get('authorization')
+          ? { Authorization: req.headers.get('authorization') as string }
+          : {}),
+        ...(req.headers.get('cookie') ? { Cookie: req.headers.get('cookie') as string } : {}),
+      },
+      body: JSON.stringify(body),
+    });
 
-    if (!message) {
-      return Response.json(
-        {
-          success: false,
-          error: 'Message is required',
-          data: {
-            message: '',
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    const result = await generateChatReply(message);
-    return Response.json(result, { status: 200 });
+    const data = await response.json();
+    return Response.json(data, { status: response.status });
   } catch (error) {
-    console.error('AI Chat Route Error:', error);
+    console.error('Backend chat proxy error:', error);
 
-    return Response.json(createChatFallbackResponse(), { status: 200 });
+    return Response.json(
+      {
+        success: false,
+        data: {
+          message: "Let's continue your interview. Tell me about yourself.",
+        },
+        error: 'AI temporarily unavailable',
+      },
+      { status: 503 }
+    );
   }
 }
