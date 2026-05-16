@@ -7,6 +7,13 @@ type ChatResponse = {
   success?: boolean;
 };
 
+type ChatRequest = {
+  language?: string;
+  message?: string;
+  messages?: Array<{ content?: string; role?: string }>;
+  mode?: string;
+};
+
 const streamHeaders = {
   'Cache-Control': 'no-cache, no-transform',
   'Content-Type': 'text/event-stream',
@@ -14,6 +21,30 @@ const streamHeaders = {
 
 const toSse = (event: string, data: unknown): string =>
   `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+function buildFallbackBody(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as ChatRequest;
+    const lastUserMessage = [...(parsed.messages ?? [])]
+      .reverse()
+      .find((message) => message.role === 'user' && message.content?.trim());
+
+    return JSON.stringify({
+      ...parsed,
+      message: parsed.message?.trim() || lastUserMessage?.content?.trim() || '',
+    });
+  } catch {
+    return body;
+  }
+}
+
+function getFallbackStatus(payload: ChatResponse, fallbackStatus: number): number {
+  if (fallbackStatus === 401 || fallbackStatus === 429) {
+    return fallbackStatus;
+  }
+
+  return payload.success === false ? 200 : fallbackStatus;
+}
 
 export async function POST(req: Request) {
   try {
@@ -36,14 +67,14 @@ export async function POST(req: Request) {
       const fallbackResponse = await fetch(`${getApiBaseUrl()}/chat`, {
         method: 'POST',
         headers,
-        body,
+        body: buildFallbackBody(body),
       });
       const payload = (await fallbackResponse.json()) as ChatResponse;
       const message = payload.data?.message || payload.message || '';
       const stream = `${message ? toSse('token', { token: message }) : ''}${toSse('done', payload)}`;
 
       return new Response(stream, {
-        status: fallbackResponse.status,
+        status: getFallbackStatus(payload, fallbackResponse.status),
         headers: streamHeaders,
       });
     }
