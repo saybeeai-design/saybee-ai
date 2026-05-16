@@ -1,23 +1,57 @@
 import { getApiBaseUrl } from '@/lib/backendUrl';
 
+type ChatResponse = {
+  data?: { message?: string } | null;
+  error?: string | null;
+  message?: string;
+  success?: boolean;
+};
+
+const streamHeaders = {
+  'Cache-Control': 'no-cache, no-transform',
+  'Content-Type': 'text/event-stream',
+};
+
+const toSse = (event: string, data: unknown): string =>
+  `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
 export async function POST(req: Request) {
   try {
+    const body = await req.text();
+    const headers = {
+      'Content-Type': req.headers.get('content-type') || 'application/json',
+      ...(req.headers.get('authorization')
+        ? { Authorization: req.headers.get('authorization') as string }
+        : {}),
+      ...(req.headers.get('cookie') ? { Cookie: req.headers.get('cookie') as string } : {}),
+    };
+
     const response = await fetch(`${getApiBaseUrl()}/chat/stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': req.headers.get('content-type') || 'application/json',
-        ...(req.headers.get('authorization')
-          ? { Authorization: req.headers.get('authorization') as string }
-          : {}),
-        ...(req.headers.get('cookie') ? { Cookie: req.headers.get('cookie') as string } : {}),
-      },
-      body: await req.text(),
+      headers,
+      body,
     });
+
+    if (response.status === 404) {
+      const fallbackResponse = await fetch(`${getApiBaseUrl()}/chat`, {
+        method: 'POST',
+        headers,
+        body,
+      });
+      const payload = (await fallbackResponse.json()) as ChatResponse;
+      const message = payload.data?.message || payload.message || '';
+      const stream = `${message ? toSse('token', { token: message }) : ''}${toSse('done', payload)}`;
+
+      return new Response(stream, {
+        status: fallbackResponse.status,
+        headers: streamHeaders,
+      });
+    }
 
     return new Response(response.body, {
       status: response.status,
       headers: {
-        'Cache-Control': 'no-cache, no-transform',
+        ...streamHeaders,
         'Content-Type': response.headers.get('content-type') || 'text/event-stream',
       },
     });
