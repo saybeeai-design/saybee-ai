@@ -1,5 +1,6 @@
 import { formatSearchContext, buildSearchQuery, searchWeb } from '../searchService';
-import { generateGeminiText } from './geminiClient';
+import { generateGeminiText } from '../../providers/geminiProvider';
+import { generateGroqText } from '../../providers/groqProvider';
 import {
   buildFallbackInterviewQuestion,
   buildFollowUpPrompt,
@@ -82,9 +83,19 @@ export async function generateInterviewQuestion(
     webContext: webContextBlock,
   });
 
-  const raw = await generateGeminiText(builtPrompt.prompt, {
-    label: `generateInterviewQuestion (${stage})`,
-  });
+  let raw: string;
+  try {
+    raw = await generateGroqText(builtPrompt.prompt, {
+      label: `generateInterviewQuestion (${stage})`,
+      maxTokens: 320,
+      timeoutMs: 4500,
+    });
+  } catch {
+    raw = await generateGeminiText(builtPrompt.prompt, {
+      label: `generateInterviewQuestion.fallback (${stage})`,
+      useCache: false,
+    });
+  }
 
   return parseGeneratedQuestionResponse(raw, builtPrompt, stage, { usedWebContext });
 }
@@ -102,9 +113,19 @@ export async function generateFollowUpQuestion(
     userAnswer,
   });
 
-  const raw = await generateGeminiText(builtPrompt.prompt, {
-    label: `generateFollowUpQuestion (${stage})`,
-  });
+  let raw: string;
+  try {
+    raw = await generateGroqText(builtPrompt.prompt, {
+      label: `generateFollowUpQuestion (${stage})`,
+      maxTokens: 300,
+      timeoutMs: 4500,
+    });
+  } catch {
+    raw = await generateGeminiText(builtPrompt.prompt, {
+      label: `generateFollowUpQuestion.fallback (${stage})`,
+      useCache: false,
+    });
+  }
 
   return parseGeneratedQuestionResponse(raw, builtPrompt, stage, {
     isFollowUp: true,

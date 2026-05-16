@@ -6,7 +6,6 @@ const databaseErrors_1 = require("../utils/databaseErrors");
 const logger_1 = require("../utils/logger");
 const isProduction = process.env.NODE_ENV === 'production';
 const errorHandler = (err, req, res, next) => {
-    var _a;
     if (res.headersSent) {
         next(err);
         return;
@@ -43,7 +42,6 @@ const errorHandler = (err, req, res, next) => {
     res.json({
         requestId: req.requestId,
         message: statusCode >= 500 && isProduction ? 'Internal Server Error' : error.message,
-        stack: isProduction ? null : (_a = error.stack) !== null && _a !== void 0 ? _a : null,
     });
 };
 exports.errorHandler = errorHandler;

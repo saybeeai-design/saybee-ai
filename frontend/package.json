@@ -5,7 +5,7 @@
   "scripts": {
     "clean": "node scripts/clean-next.js",
     "dev": "next dev",
-    "build": "npm run clean && next build",
+    "build": "node scripts/clean-next.js && next build",
     "start": "next start",
     "lint": "eslint src",
     "test": "vitest run"

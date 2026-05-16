@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import toast from 'react-hot-toast';
-import api from '@/lib/api';
+import { streamChatCompletion } from '@/lib/aiStreaming';
 
 type RequestState = 'idle' | 'thinking' | 'streaming';
 
@@ -15,16 +15,6 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-}
-
-interface ChatApiResponse {
-  success?: boolean;
-  data?: {
-    message?: string;
-  };
-  error?: string;
-  message?: string;
-  reply?: string;
 }
 
 interface MessageLayout {
@@ -100,22 +90,6 @@ const markdownComponents: Components = {
   },
 };
 
-function buildPrompt(messages: Message[]) {
-  const transcript = messages
-    .slice(-12)
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
-    .join('\n\n');
-
-  return [
-    'You are SayBee AI, a world-class assistant for interview prep, resume feedback, and career coaching.',
-    'Respond like a premium conversational AI product: clear, practical, thoughtful, and concise.',
-    'Use markdown only when it makes the answer easier to scan.',
-    'Conversation:',
-    transcript,
-    'Assistant:',
-  ].join('\n\n');
-}
-
 function createMessage(role: Message['role'], content: string): Message {
   return {
     id:
@@ -125,43 +99,6 @@ function createMessage(role: Message['role'], content: string): Message {
     role,
     content,
   };
-}
-
-function tokenizeForStreaming(content: string) {
-  const tokens = content.match(/\S+\s*|\n+/g);
-  return tokens && tokens.length > 0 ? tokens : [content];
-}
-
-function getBatchSize(tokenCount: number) {
-  if (tokenCount > 180) {
-    return 5;
-  }
-
-  if (tokenCount > 90) {
-    return 4;
-  }
-
-  if (tokenCount > 40) {
-    return 3;
-  }
-
-  return 2;
-}
-
-function getStreamDelay(lastToken: string) {
-  if (/\n/.test(lastToken)) {
-    return 110;
-  }
-
-  if (/[.!?]$/.test(lastToken.trim())) {
-    return 95;
-  }
-
-  if (/[,:;]$/.test(lastToken.trim())) {
-    return 70;
-  }
-
-  return 38;
 }
 
 function MessageBubble({
@@ -372,7 +309,6 @@ export default function ChatWorkspace() {
   const messageHeightsRef = useRef<Map<string, number>>(new Map());
   const messagesRef = useRef<Message[]>([]);
   const shouldStickToBottomRef = useRef(true);
-  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const unmountedRef = useRef(false);
 
@@ -419,10 +355,6 @@ export default function ChatWorkspace() {
   useEffect(() => {
     return () => {
       unmountedRef.current = true;
-
-      if (streamTimeoutRef.current) {
-        clearTimeout(streamTimeoutRef.current);
-      }
 
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
@@ -555,96 +487,56 @@ export default function ChatWorkspace() {
     }, 1800);
   };
 
-  const streamAssistantMessage = async (fullText: string) => {
-    const tokens = tokenizeForStreaming(fullText);
-    const batchSize = getBatchSize(tokens.length);
-    const assistantMessage = createMessage('assistant', tokens.slice(0, batchSize).join(''));
-
-    setRequestState('streaming');
-    startTransition(() => {
-      setMessages((current) => {
-        const nextMessages = [...current, assistantMessage];
-        messagesRef.current = nextMessages;
-        return nextMessages;
-      });
-    });
-
-    let tokenIndex = batchSize;
-
-    if (tokenIndex >= tokens.length) {
-      setRequestState('idle');
-      setRetryConversation(null);
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      const pump = () => {
-        if (unmountedRef.current) {
-          resolve();
-          return;
-        }
-
-        tokenIndex = Math.min(tokenIndex + batchSize, tokens.length);
-        const nextContent = tokens.slice(0, tokenIndex).join('');
-
-        startTransition(() => {
-          setMessages((current) => {
-            const nextMessages = current.map((message) =>
-              message.id === assistantMessage.id ? { ...message, content: nextContent } : message
-            );
-            messagesRef.current = nextMessages;
-            return nextMessages;
-          });
-        });
-
-        if (shouldStickToBottomRef.current) {
-          scrollToBottom('auto');
-        }
-
-        if (tokenIndex >= tokens.length) {
-          resolve();
-          return;
-        }
-
-        streamTimeoutRef.current = setTimeout(
-          pump,
-          getStreamDelay(tokens[Math.max(tokenIndex - 1, 0)] ?? '')
-        );
-      };
-
-      streamTimeoutRef.current = setTimeout(pump, 70);
-    });
-
-    setRequestState('idle');
-    setRetryConversation(null);
-  };
-
   const requestAssistantReply = async (conversation: Message[]) => {
     setRequestState('thinking');
 
     try {
-      const response = await api.post<ChatApiResponse>('/chat', {
-        message: buildPrompt(conversation),
+      const assistantMessage = createMessage('assistant', '');
+      setRequestState('streaming');
+      startTransition(() => {
+        setMessages((current) => {
+          const nextMessages = [...current, assistantMessage];
+          messagesRef.current = nextMessages;
+          return nextMessages;
+        });
       });
 
-      const replyText =
-        response.data.data?.message?.trim() ??
-        response.data.reply?.trim() ??
-        response.data.message?.trim() ??
-        '';
+      let streamedText = '';
+      await streamChatCompletion(
+        {
+          messages: conversation.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          mode: 'general',
+        },
+        (token) => {
+          streamedText += token;
+          startTransition(() => {
+            setMessages((current) => {
+              const nextMessages = current.map((message) =>
+                message.id === assistantMessage.id ? { ...message, content: streamedText } : message
+              );
+              messagesRef.current = nextMessages;
+              return nextMessages;
+            });
+          });
 
-      if (!replyText) {
+          if (shouldStickToBottomRef.current) {
+            scrollToBottom('auto');
+          }
+        }
+      );
+
+      if (!streamedText.trim()) {
+        setMessages((current) => current.filter((message) => message.id !== assistantMessage.id));
         setRetryConversation(conversation);
-        setRequestState('idle');
         toast.error('AI is temporarily unavailable');
-        return;
+      } else {
+        setRetryConversation(null);
       }
 
-      if (response.data.success === false) {
-        toast.error(response.data.error ?? 'AI is temporarily unavailable');
-      }
-
-      await streamAssistantMessage(replyText);
+      setRequestState('idle');
     } catch (error) {
       console.error('Chat error:', error);
       setRetryConversation(conversation);

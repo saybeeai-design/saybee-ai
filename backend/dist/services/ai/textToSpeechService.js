@@ -12,31 +12,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LANGUAGE_CODES = void 0;
 exports.textToSpeech = textToSpeech;
 exports.getLanguageCode = getLanguageCode;
-function textToSpeech(text_1) {
-    return __awaiter(this, arguments, void 0, function* (text, languageCode = 'en-US') {
-        const googleTtsKey = process.env.GOOGLE_TTS_API_KEY;
-        if (!googleTtsKey) {
-            throw new Error('GOOGLE_TTS_API_KEY is not configured');
-        }
-        const requestBody = {
-            input: { text },
-            voice: { languageCode, ssmlGender: 'FEMALE' },
-            audioConfig: { audioEncoding: 'MP3' },
-        };
-        const response = yield fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleTtsKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody),
-        });
-        if (!response.ok) {
-            const err = yield response.text();
-            throw new Error(`Google TTS error ${response.status}: ${err}`);
-        }
-        const data = (yield response.json());
+function textToSpeech(text) {
+    return __awaiter(this, void 0, void 0, function* () {
         return {
-            audioBase64: data.audioContent,
             text,
-            isStub: false,
+            isStub: true,
         };
     });
 }

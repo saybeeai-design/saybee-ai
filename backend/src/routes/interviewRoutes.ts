@@ -33,7 +33,11 @@ router.post('/:id/next-turn', nextInterviewTurn as unknown as RequestHandler);  
 router.post('/speech-to-text', upload.single('audio'), (async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No audio file provided' });
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'No audio file provided',
+      });
     }
 
     const filePath = req.file.path;
@@ -41,13 +45,17 @@ router.post('/speech-to-text', upload.single('audio'), (async (req, res) => {
 
     res.json({
       success: true,
-      transcript: transcript
+      data: { transcript },
+      error: null,
+      transcript,
     });
   } catch (error) {
     console.error("Whisper transcription error:", error);
-    res.status(500).json({
+    res.status(503).json({
       success: false,
-      message: "Failed to transcribe audio"
+      data: { transcript: '' },
+      error: 'Transcription is temporarily unavailable. Please retry the recording.',
+      transcript: '',
     });
   }
 }) as RequestHandler);

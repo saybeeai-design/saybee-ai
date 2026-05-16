@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { interviewAPI, aiAPI } from '@/lib/api';
+import { interviewAPI } from '@/lib/api';
 import { Mic, MicOff, PhoneOff, Volume2, User, Globe } from 'lucide-react';
 import Image from 'next/image';
 import AIAvatar from '@/components/interview/AIAvatar';
@@ -75,7 +75,8 @@ export default function InterviewPage() {
     };
   }, []);
 
-  const playAudio = useCallback((base64: string | null, fallbackText: string, onEnd?: () => void) => {
+  const playAudio = useCallback((tts: { audioBase64?: string } | string | null, fallbackText: string, onEnd?: () => void) => {
+    const base64 = typeof tts === 'string' ? tts : tts?.audioBase64;
     if (base64) {
       try {
         const audio = new Audio("data:audio/mp3;base64," + base64);
@@ -134,7 +135,7 @@ export default function InterviewPage() {
       if (isLast) {
         await interviewAPI.nextTurn(id, { 
           questionId: currentQuestion.id, 
-          answerContent: finalTranscript + (selectedLanguage !== 'English' ? `\n\n[Please ask the next question exclusively in ${selectedLanguage}]` : ''), 
+          answerContent: finalTranscript, 
           speakNextQuestion: false 
         });
         await interviewAPI.finish(id);
@@ -144,7 +145,7 @@ export default function InterviewPage() {
       } else {
         const res = await interviewAPI.nextTurn(id, { 
           questionId: currentQuestion.id, 
-          answerContent: finalTranscript + (selectedLanguage !== 'English' ? `\n\n[Please ask the next question exclusively in ${selectedLanguage}]` : ''), 
+          answerContent: finalTranscript, 
           speakNextQuestion: true 
         });
         const data = res.data;

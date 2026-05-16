@@ -81,7 +81,7 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const interviewId = req.params.id;
-        const { speakQuestion = false } = req.body;
+        const startedAt = Date.now();
         const interview = yield db_1.default.interview.findFirst({
             where: { id: interviewId, userId },
             include: {
@@ -138,13 +138,9 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
             },
         });
         // 3. Optionally convert question to speech
-        let ttsResult = null;
-        if (speakQuestion) {
-            const langCode = (0, textToSpeechService_1.getLanguageCode)(interview.language);
-            ttsResult = yield (0, textToSpeechService_1.textToSpeech)(generatedQuestion.question, langCode);
-        }
+        const ttsResult = yield (0, textToSpeechService_1.textToSpeech)(generatedQuestion.question);
         const isLastQuestion = totalQuestions + 1 >= maxQuestions;
-        res.status(201).json({
+        res.status(201).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({
             question,
             stage,
             stageIndex,
@@ -154,7 +150,9 @@ const generateAIQuestion = (req, res, next) => __awaiter(void 0, void 0, void 0,
             questionMeta: generatedQuestion,
             isLastQuestion,
             tts: ttsResult,
-        });
+        }, generatedQuestion.contextUsed.includes('fallback_question') ? 'fallback' : 'groq', startedAt)), { question,
+            stage,
+            stageIndex, totalStages: interviewController_1.INTERVIEW_STAGES.length, questionNumber: totalQuestions + 1, totalQuestions: maxQuestions, questionMeta: generatedQuestion, isLastQuestion, tts: ttsResult }));
     }
     catch (error) {
         next(error);
@@ -232,11 +230,16 @@ const transcribeAudioFile = (req, res, next) => __awaiter(void 0, void 0, void 0
             res.status(400).json((0, aiService_1.aiFailure)('No audio file provided'));
             return;
         }
-        const result = yield (0, speechToTextService_1.transcribeBuffer)(req.file.buffer);
-        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ transcription: result })), { transcription: result }));
+        const startedAt = Date.now();
+        const result = yield (0, speechToTextService_1.transcribeBuffer)(req.file.buffer, {
+            contentType: req.file.mimetype,
+            filename: req.file.originalname,
+        });
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ transcription: result }, 'groq-whisper', startedAt)), { transcription: result }));
     }
-    catch (error) {
-        next(error);
+    catch (_a) {
+        const startedAt = Date.now();
+        res.status(503).json((0, aiService_1.aiFailure)('Transcription is temporarily unavailable. Please retry the recording.', { transcription: { text: '' } }, 'groq-whisper', startedAt));
     }
 });
 exports.transcribeAudioFile = transcribeAudioFile;
@@ -250,9 +253,9 @@ const speakText = (req, res, next) => __awaiter(void 0, void 0, void 0, function
             res.status(400).json((0, aiService_1.aiFailure)('text is required'));
             return;
         }
-        const langCode = (0, textToSpeechService_1.getLanguageCode)(language);
-        const result = yield (0, textToSpeechService_1.textToSpeech)(text, langCode);
-        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ tts: result })), { tts: result }));
+        const startedAt = Date.now();
+        const result = yield (0, textToSpeechService_1.textToSpeech)(text);
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({ tts: result }, 'browser-speechSynthesis', startedAt)), { tts: result }));
     }
     catch (error) {
         next(error);
@@ -267,13 +270,14 @@ exports.speakText = speakText;
 //   4. Convert it to speech
 //   Returns everything in one response for optimized frontend usage.
 const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const interviewId = req.params.id;
         const { questionId, // The question being answered
         answerContent, // Plain text answer (from STT or typed)
-        speakNextQuestion = true, } = req.body;
+         } = req.body;
+        const startedAt = Date.now();
         if (!questionId || !answerContent) {
             res.status(400).json({ message: 'questionId and answerContent are required' });
             return;
@@ -428,9 +432,8 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             }
             nextQuestionMeta = generatedQuestion;
             // Optionally convert next question to speech
-            if (speakNextQuestion && nextQuestion) {
-                const langCode = (0, textToSpeechService_1.getLanguageCode)(currentInterview.language);
-                tts = yield (0, textToSpeechService_1.textToSpeech)(nextQuestion.content, langCode);
+            if (nextQuestion) {
+                tts = yield (0, textToSpeechService_1.textToSpeech)(nextQuestion.content);
             }
         }
         else {
@@ -441,7 +444,7 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
                 data: { status: 'COMPLETED' },
             });
         }
-        res.status(200).json({
+        res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({
             evaluatedAnswer,
             feedback,
             nextQuestion,
@@ -450,7 +453,14 @@ const nextInterviewTurn = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             interviewDone,
             isFollowUp,
             totalAsked,
-        });
+        }, ((_e = nextQuestionMeta === null || nextQuestionMeta === void 0 ? void 0 : nextQuestionMeta.contextUsed) === null || _e === void 0 ? void 0 : _e.includes('fallback_question')) ? 'fallback' : 'groq', startedAt)), { evaluatedAnswer,
+            feedback,
+            nextQuestion,
+            nextQuestionMeta,
+            tts,
+            interviewDone,
+            isFollowUp,
+            totalAsked }));
     }
     catch (error) {
         next(error);
@@ -467,12 +477,13 @@ const uploadChatFile = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
         }
         const { uploadFileToCloud } = yield Promise.resolve().then(() => __importStar(require('../services/storageService')));
         const fileUrl = yield uploadFileToCloud(req.file.buffer, req.file.originalname, req.file.mimetype);
+        const startedAt = Date.now();
         res.status(200).json(Object.assign(Object.assign({}, (0, aiService_1.aiSuccess)({
             fileUrl,
             fileId: req.file.originalname,
             fileName: req.file.originalname,
             fileSize: req.file.size,
-        })), { fileUrl, fileId: req.file.originalname, fileName: req.file.originalname, fileSize: req.file.size }));
+        }, 'fallback', startedAt)), { fileUrl, fileId: req.file.originalname, fileName: req.file.originalname, fileSize: req.file.size }));
     }
     catch (error) {
         next(error);

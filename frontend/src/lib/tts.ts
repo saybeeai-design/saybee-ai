@@ -40,8 +40,8 @@ export function getLanguageCode(lang: string) {
 }
 
 export function getSafeLanguage(lang: string) {
-  const supported = ["en-US", "hi-IN", "bn-IN"];
+  const supported = ["en-US", "hi-IN", "as-IN", "bn-IN", "ta-IN", "te-IN", "mr-IN", "gu-IN"];
   const code = getLanguageCode(lang);
   if (supported.includes(code)) return code;
-  return "hi-IN"; // fallback
+  return "en-US";
 }

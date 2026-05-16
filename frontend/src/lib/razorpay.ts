@@ -62,11 +62,7 @@ export async function openRazorpayCheckout({
   contact,
   onSuccess,
 }: RazorpayCheckoutOptions): Promise<void> {
-  const key =
-    providedKey ||
-    process.env.NEXT_PUBLIC_RAZORPAY_KEY ||
-    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-    '';
+  const key = providedKey || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
 
   if (!key) {
     throw new Error('Missing Razorpay checkout key. Restart the frontend and backend after updating payment env vars.');

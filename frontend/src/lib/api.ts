@@ -91,8 +91,6 @@ export const questionAPI = {
 export const aiAPI = {
   transcribe: (formData: FormData) =>
     api.post('/ai/transcribe', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  speak: (text: string, language = 'English') =>
-    api.post('/ai/speak', { text, language }),
 };
 
 export const paymentAPI = {

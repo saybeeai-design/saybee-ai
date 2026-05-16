@@ -46,6 +46,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
+require("./config/env");
 const express_1 = __importDefault(require("express"));
 const Sentry = __importStar(require("@sentry/node"));
 const cors_1 = __importDefault(require("cors"));
@@ -70,89 +71,6 @@ Sentry.init({
     dsn: process.env.SENTRY_DSN || undefined,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
 });
-const validateAbsoluteUrl = (envVar, value) => {
-    try {
-        const parsedUrl = new URL(value);
-        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-            throw new Error('Unsupported protocol');
-        }
-    }
-    catch (_a) {
-        console.error(`[Config] ${envVar} must be a valid absolute http(s) URL.`);
-        process.exit(1);
-    }
-};
-const validateCorsOrigins = (origins) => {
-    const normalizedOrigins = origins
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean);
-    if (normalizedOrigins.length === 0) {
-        console.error('[Config] CORS_ORIGIN must contain at least one origin.');
-        process.exit(1);
-    }
-    for (const origin of normalizedOrigins) {
-        validateAbsoluteUrl('CORS_ORIGIN', origin);
-    }
-};
-const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'];
-for (const envVar of requiredEnvVars) {
-    if (!process.env[envVar]) {
-        console.error(`Missing required environment variable: ${envVar}`);
-        process.exit(1);
-    }
-}
-if (!process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
-    console.error('Missing required environment variable: GEMINI_API_KEY or OPENROUTER_API_KEY');
-    process.exit(1);
-}
-if (process.env.NODE_ENV === 'production') {
-    for (const envVar of ['FRONTEND_URL', 'CORS_ORIGIN']) {
-        if (!process.env[envVar]) {
-            console.error(`Missing required environment variable in production: ${envVar}`);
-            process.exit(1);
-        }
-    }
-}
-const requiredProductionEnvGroups = [
-    {
-        name: 'Google OAuth',
-        keys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALLBACK_URL'],
-    },
-    {
-        name: 'Razorpay',
-        keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'],
-    },
-    {
-        name: 'SMTP',
-        keys: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'],
-    },
-    {
-        name: 'Storage',
-        keys: ['AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_BUCKET_NAME'],
-    },
-    {
-        name: 'AI Speech',
-        keys: ['OPENAI_API_KEY', 'GOOGLE_TTS_API_KEY'],
-    },
-];
-for (const { name, keys } of requiredProductionEnvGroups) {
-    const configuredKeys = keys.filter((key) => Boolean(process.env[key]));
-    if (process.env.NODE_ENV === 'production' && configuredKeys.length !== keys.length) {
-        const missingKeys = keys.filter((key) => !process.env[key]);
-        console.error(`[Config] ${name} is missing required variables in production: ${missingKeys.join(', ')}`);
-        process.exit(1);
-    }
-}
-if (process.env.FRONTEND_URL) {
-    validateAbsoluteUrl('FRONTEND_URL', process.env.FRONTEND_URL);
-}
-if (process.env.GOOGLE_CALLBACK_URL) {
-    validateAbsoluteUrl('GOOGLE_CALLBACK_URL', process.env.GOOGLE_CALLBACK_URL);
-}
-if (process.env.CORS_ORIGIN) {
-    validateCorsOrigins(process.env.CORS_ORIGIN);
-}
 const app = (0, express_1.default)();
 // Render forwards the client IP through a proxy, so trust the first hop.
 app.set('trust proxy', 1);

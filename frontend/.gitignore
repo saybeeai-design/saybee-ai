@@ -18,6 +18,7 @@
 /.next-prod/
 /build-output/
 /out/
+/node_modules/.cache/
 
 # production
 /build
@@ -41,3 +42,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local tool caches
+.eslintcache

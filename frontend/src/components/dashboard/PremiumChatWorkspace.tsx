@@ -21,7 +21,7 @@ import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import toast from 'react-hot-toast';
 import { VoiceRecorder, transcribeAudio, uploadFile, formatFileSize } from '@/lib/voiceFileUtils';
-import api from '@/lib/api';
+import { streamChatCompletion } from '@/lib/aiStreaming';
 
 type RequestState = 'idle' | 'thinking' | 'streaming';
 type AIMode = 'general' | 'interview' | 'resume' | 'career';
@@ -38,16 +38,6 @@ interface ChatSession {
   mode: AIMode;
   createdAt: number;
   messages: Message[];
-}
-
-interface ChatApiResponse {
-  success?: boolean;
-  data?: {
-    message?: string;
-  };
-  error?: string;
-  message?: string;
-  reply?: string;
 }
 
 const STORAGE_KEY = 'saybeeai-chat-sessions';
@@ -153,34 +143,6 @@ const markdownComponents: Components = {
   },
 };
 
-function buildPrompt(messages: Message[], mode: AIMode) {
-  const modeContext: Record<AIMode, string> = {
-    general:
-      'You are a professional career advisor. Provide clear, actionable advice for career decisions.',
-    interview:
-      'You are an expert interview coach. Help users prepare for interviews with tips, feedback, and practice scenarios.',
-    resume:
-      'You are a professional resume expert. Help users optimize their resume with concrete improvements.',
-    career:
-      'You are a career strategist. Help users plan their career path with actionable steps.',
-  };
-
-  const transcript = messages
-    .slice(-12)
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`)
-    .join('\n\n');
-
-  return [
-    'You are SayBee AI, a world-class assistant for career development.',
-    modeContext[mode],
-    'Respond like a premium conversational AI: clear, practical, thoughtful, and concise.',
-    'Use markdown only when it makes the answer easier to scan. Keep responses focused and human-like.',
-    'Conversation:',
-    transcript,
-    'Assistant:',
-  ].join('\n\n');
-}
-
 function createMessage(role: Message['role'], content: string): Message {
   return {
     id:
@@ -190,25 +152,6 @@ function createMessage(role: Message['role'], content: string): Message {
     role,
     content,
   };
-}
-
-function tokenizeForStreaming(content: string) {
-  const tokens = content.match(/\S+\s*|\n+/g);
-  return tokens && tokens.length > 0 ? tokens : [content];
-}
-
-function getBatchSize(tokenCount: number) {
-  if (tokenCount > 180) return 5;
-  if (tokenCount > 90) return 4;
-  if (tokenCount > 40) return 3;
-  return 2;
-}
-
-function getStreamDelay(lastToken: string) {
-  if (/\n/.test(lastToken)) return 110;
-  if (/[.!?]$/.test(lastToken.trim())) return 95;
-  if (/[,:;]$/.test(lastToken.trim())) return 70;
-  return 38;
 }
 
 function MessageBubble({
@@ -509,7 +452,6 @@ export default function PremiumChatWorkspace() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -526,7 +468,6 @@ export default function PremiumChatWorkspace() {
   useEffect(() => {
     return () => {
       unmountedRef.current = true;
-      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     };
   }, []);
@@ -564,88 +505,43 @@ export default function PremiumChatWorkspace() {
     }, 1800);
   };
 
-  const streamAssistantMessage = async (fullText: string) => {
-    const tokens = tokenizeForStreaming(fullText);
-    const batchSize = getBatchSize(tokens.length);
-    const assistantMessage = createMessage('assistant', tokens.slice(0, batchSize).join(''));
-
-    setRequestState('streaming');
-    startTransition(() => {
-      setMessages((current) => [...current, assistantMessage]);
-    });
-
-    let tokenIndex = batchSize;
-
-    if (tokenIndex >= tokens.length) {
-      setRequestState('idle');
-      scrollToBottom('auto');
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      const pump = () => {
-        if (unmountedRef.current) {
-          resolve();
-          return;
-        }
-
-        tokenIndex = Math.min(tokenIndex + batchSize, tokens.length);
-        const nextContent = tokens.slice(0, tokenIndex).join('');
-
-        startTransition(() => {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessage.id ? { ...message, content: nextContent } : message
-            )
-          );
-        });
-
-        if (shouldStickToBottomRef.current) {
-          scrollToBottom('auto');
-        }
-
-        if (tokenIndex >= tokens.length) {
-          resolve();
-          return;
-        }
-
-        streamTimeoutRef.current = setTimeout(
-          pump,
-          getStreamDelay(tokens[Math.max(tokenIndex - 1, 0)] ?? '')
-        );
-      };
-
-      streamTimeoutRef.current = setTimeout(pump, 70);
-    });
-
-    setRequestState('idle');
-  };
-
   const requestAssistantReply = async (conversation: Message[]) => {
     setRequestState('thinking');
 
     try {
-      const response = await api.post<ChatApiResponse>('/chat', {
-        message: buildPrompt(conversation, currentMode),
+      const assistantMessage = createMessage('assistant', '');
+      setRequestState('streaming');
+      startTransition(() => {
+        setMessages((current) => [...current, assistantMessage]);
       });
 
-      const replyText =
-        response.data.data?.message?.trim() ??
-        response.data.reply?.trim() ??
-        response.data.message?.trim() ??
-        '';
+      let streamedText = '';
+      await streamChatCompletion(
+        {
+          messages: conversation.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+          mode: currentMode,
+        },
+        (token) => {
+          streamedText += token;
+          startTransition(() => {
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantMessage.id ? { ...message, content: streamedText } : message
+              )
+            );
+          });
+        }
+      );
 
-      if (!replyText) {
-        setRequestState('idle');
+      if (!streamedText.trim()) {
+        setMessages((current) => current.filter((message) => message.id !== assistantMessage.id));
         toast.error('AI is temporarily unavailable');
-        return;
       }
 
-      if (response.data.success === false) {
-        toast.error(response.data.error ?? 'AI is temporarily unavailable');
-      }
-
-      await streamAssistantMessage(replyText);
+      setRequestState('idle');
     } catch {
       console.error('Chat error');
       setRequestState('idle');

@@ -59,7 +59,6 @@ export const errorHandler = (err: unknown, req: RequestWithContext, res: Respons
   res.json({
     requestId: req.requestId,
     message: statusCode >= 500 && isProduction ? 'Internal Server Error' : error.message,
-    stack: isProduction ? null : error.stack ?? null,
   });
 };
 

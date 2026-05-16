@@ -33,20 +33,28 @@ router.post('/:id/next-turn', aiController_1.nextInterviewTurn); // POST /api/in
 router.post('/speech-to-text', uploadMiddleware_1.upload.single('audio'), ((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.file) {
-            return res.status(400).json({ success: false, message: 'No audio file provided' });
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'No audio file provided',
+            });
         }
         const filePath = req.file.path;
         const transcript = yield (0, whisperService_1.transcribeAudio)(filePath);
         res.json({
             success: true,
-            transcript: transcript
+            data: { transcript },
+            error: null,
+            transcript,
         });
     }
     catch (error) {
         console.error("Whisper transcription error:", error);
-        res.status(500).json({
+        res.status(503).json({
             success: false,
-            message: "Failed to transcribe audio"
+            data: { transcript: '' },
+            error: 'Transcription is temporarily unavailable. Please retry the recording.',
+            transcript: '',
         });
     }
 })));

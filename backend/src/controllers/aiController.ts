@@ -12,7 +12,7 @@ import {
   generateFollowUpQuestion,
 } from '../services/ai/questionService';
 import { transcribeBuffer } from '../services/ai/speechToTextService';
-import { textToSpeech, getLanguageCode } from '../services/ai/textToSpeechService';
+import { textToSpeech } from '../services/ai/textToSpeechService';
 import { aiFailure, aiSuccess } from '../services/aiService';
 import { INTERVIEW_STAGES } from './interviewController';
 
@@ -53,7 +53,7 @@ export const generateAIQuestion = async (
   try {
     const userId = req.user?.userId;
     const interviewId = req.params.id as string;
-    const { speakQuestion = false } = req.body;
+    const startedAt = Date.now();
 
     const interview = await prisma.interview.findFirst({
       where: { id: interviewId, userId },
@@ -122,15 +122,26 @@ export const generateAIQuestion = async (
     });
 
     // 3. Optionally convert question to speech
-    let ttsResult = null;
-    if (speakQuestion) {
-      const langCode = getLanguageCode(interview.language);
-      ttsResult = await textToSpeech(generatedQuestion.question, langCode);
-    }
+    const ttsResult = await textToSpeech(generatedQuestion.question);
 
     const isLastQuestion = totalQuestions + 1 >= maxQuestions;
 
     res.status(201).json({
+      ...aiSuccess(
+        {
+          question,
+          stage,
+          stageIndex,
+          totalStages: INTERVIEW_STAGES.length,
+          questionNumber: totalQuestions + 1,
+          totalQuestions: maxQuestions,
+          questionMeta: generatedQuestion,
+          isLastQuestion,
+          tts: ttsResult,
+        },
+        generatedQuestion.contextUsed.includes('fallback_question') ? 'fallback' : 'groq',
+        startedAt
+      ),
       question,
       stage,
       stageIndex,
@@ -232,14 +243,26 @@ export const transcribeAudioFile = async (
       return;
     }
 
-    const result = await transcribeBuffer(req.file.buffer);
+    const startedAt = Date.now();
+    const result = await transcribeBuffer(req.file.buffer, {
+      contentType: req.file.mimetype,
+      filename: req.file.originalname,
+    });
 
     res.status(200).json({
-      ...aiSuccess({ transcription: result }),
+      ...aiSuccess({ transcription: result }, 'groq-whisper', startedAt),
       transcription: result,
     });
-  } catch (error) {
-    next(error);
+  } catch {
+    const startedAt = Date.now();
+    res.status(503).json(
+      aiFailure(
+        'Transcription is temporarily unavailable. Please retry the recording.',
+        { transcription: { text: '' } },
+        'groq-whisper',
+        startedAt
+      )
+    );
   }
 };
 
@@ -259,11 +282,11 @@ export const speakText = async (
       return;
     }
 
-    const langCode = getLanguageCode(language);
-    const result = await textToSpeech(text, langCode);
+    const startedAt = Date.now();
+    const result = await textToSpeech(text);
 
     res.status(200).json({
-      ...aiSuccess({ tts: result }),
+      ...aiSuccess({ tts: result }, 'browser-speechSynthesis', startedAt),
       tts: result,
     });
   } catch (error) {
@@ -289,8 +312,8 @@ export const nextInterviewTurn = async (
     const {
       questionId,        // The question being answered
       answerContent,     // Plain text answer (from STT or typed)
-      speakNextQuestion = true,
     } = req.body;
+    const startedAt = Date.now();
 
     if (!questionId || !answerContent) {
       res.status(400).json({ message: 'questionId and answerContent are required' });
@@ -468,9 +491,8 @@ export const nextInterviewTurn = async (
       nextQuestionMeta = generatedQuestion;
 
       // Optionally convert next question to speech
-      if (speakNextQuestion && nextQuestion) {
-        const langCode = getLanguageCode(currentInterview!.language);
-        tts = await textToSpeech(nextQuestion.content, langCode);
+      if (nextQuestion) {
+        tts = await textToSpeech(nextQuestion.content);
       }
     } else {
       // No more questions: interview is complete
@@ -482,6 +504,20 @@ export const nextInterviewTurn = async (
     }
 
     res.status(200).json({
+      ...aiSuccess(
+        {
+          evaluatedAnswer,
+          feedback,
+          nextQuestion,
+          nextQuestionMeta,
+          tts,
+          interviewDone,
+          isFollowUp,
+          totalAsked,
+        },
+        nextQuestionMeta?.contextUsed?.includes('fallback_question') ? 'fallback' : 'groq',
+        startedAt
+      ),
       evaluatedAnswer,
       feedback,
       nextQuestion,
@@ -516,13 +552,14 @@ export const uploadChatFile = async (
       req.file.mimetype
     );
 
+    const startedAt = Date.now();
     res.status(200).json({
       ...aiSuccess({
         fileUrl,
         fileId: req.file.originalname,
         fileName: req.file.originalname,
         fileSize: req.file.size,
-      }),
+      }, 'fallback', startedAt),
       fileUrl,
       fileId: req.file.originalname,
       fileName: req.file.originalname,

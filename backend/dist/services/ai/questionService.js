@@ -14,7 +14,8 @@ exports.generateInterviewQuestion = generateInterviewQuestion;
 exports.generateFollowUpQuestion = generateFollowUpQuestion;
 exports.buildQuestionFallback = buildQuestionFallback;
 const searchService_1 = require("../searchService");
-const geminiClient_1 = require("./geminiClient");
+const geminiProvider_1 = require("../../providers/geminiProvider");
+const groqProvider_1 = require("../../providers/groqProvider");
 const promptBuilder_1 = require("./promptBuilder");
 Object.defineProperty(exports, "getInterviewConfigFromReportData", { enumerable: true, get: function () { return promptBuilder_1.getInterviewConfigFromReportData; } });
 const roleContexts_1 = require("./roleContexts");
@@ -67,9 +68,20 @@ function generateInterviewQuestion(input) {
             stage,
             webContext: webContextBlock,
         });
-        const raw = yield (0, geminiClient_1.generateGeminiText)(builtPrompt.prompt, {
-            label: `generateInterviewQuestion (${stage})`,
-        });
+        let raw;
+        try {
+            raw = yield (0, groqProvider_1.generateGroqText)(builtPrompt.prompt, {
+                label: `generateInterviewQuestion (${stage})`,
+                maxTokens: 320,
+                timeoutMs: 4500,
+            });
+        }
+        catch (_a) {
+            raw = yield (0, geminiProvider_1.generateGeminiText)(builtPrompt.prompt, {
+                label: `generateInterviewQuestion.fallback (${stage})`,
+                useCache: false,
+            });
+        }
         return (0, promptBuilder_1.parseGeneratedQuestionResponse)(raw, builtPrompt, stage, { usedWebContext });
     });
 }
@@ -84,9 +96,20 @@ function generateFollowUpQuestion(input) {
             stage,
             userAnswer,
         });
-        const raw = yield (0, geminiClient_1.generateGeminiText)(builtPrompt.prompt, {
-            label: `generateFollowUpQuestion (${stage})`,
-        });
+        let raw;
+        try {
+            raw = yield (0, groqProvider_1.generateGroqText)(builtPrompt.prompt, {
+                label: `generateFollowUpQuestion (${stage})`,
+                maxTokens: 300,
+                timeoutMs: 4500,
+            });
+        }
+        catch (_a) {
+            raw = yield (0, geminiProvider_1.generateGeminiText)(builtPrompt.prompt, {
+                label: `generateFollowUpQuestion.fallback (${stage})`,
+                useCache: false,
+            });
+        }
         return (0, promptBuilder_1.parseGeneratedQuestionResponse)(raw, builtPrompt, stage, {
             isFollowUp: true,
             usedWebContext: false,

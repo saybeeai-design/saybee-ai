@@ -9,4 +9,9 @@ logs
 .DS_Store
 .codex-tmp-dist/
 backend/uploads/
+frontend/.next/
+frontend/.next-prod/
 frontend/build-output/
+frontend/node_modules/.cache/
+frontend/.eslintcache
+frontend/tsconfig.tsbuildinfo
