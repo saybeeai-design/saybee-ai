@@ -538,14 +538,15 @@ export default function PremiumChatWorkspace() {
 
       if (!streamedText.trim()) {
         setMessages((current) => current.filter((message) => message.id !== assistantMessage.id));
-        toast.error('AI is temporarily unavailable');
+        toast.error('The AI service is temporarily unavailable.');
       }
 
       setRequestState('idle');
-    } catch {
-      console.error('Chat error');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The AI service is temporarily unavailable.';
+      console.error('Chat error:', error);
       setRequestState('idle');
-      toast.error('AI is temporarily unavailable');
+      toast.error(message);
     }
   };
 

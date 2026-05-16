@@ -531,17 +531,18 @@ export default function ChatWorkspace() {
       if (!streamedText.trim()) {
         setMessages((current) => current.filter((message) => message.id !== assistantMessage.id));
         setRetryConversation(conversation);
-        toast.error('AI is temporarily unavailable');
+        toast.error('The AI service is temporarily unavailable.');
       } else {
         setRetryConversation(null);
       }
 
       setRequestState('idle');
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'The AI service is temporarily unavailable.';
       console.error('Chat error:', error);
       setRetryConversation(conversation);
       setRequestState('idle');
-      toast.error('AI is temporarily unavailable');
+      toast.error(message);
     }
   };
 
