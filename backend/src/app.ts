@@ -101,8 +101,27 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   });
 });
 
+const databaseRequiredApiPrefixes = [
+  '/admin',
+  '/auth',
+  '/coupons',
+  '/interviews',
+  '/payments',
+  '/questions',
+  '/resumes',
+  '/users',
+];
+
+const requiresDatabaseConnection = (path: string): boolean =>
+  databaseRequiredApiPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+
 app.use('/api', async (req: Request, _res: Response, next: NextFunction) => {
   if (req.path === '/health') {
+    next();
+    return;
+  }
+
+  if (!requiresDatabaseConnection(req.path)) {
     next();
     return;
   }

@@ -50,7 +50,7 @@ Object.defineProperty(exports, "isRecoverableDatabaseError", { enumerable: true,
 const schemaCompatibilityService_1 = require("./schemaCompatibilityService");
 const STARTUP_RETRIES = Number((_a = process.env.DB_CONNECT_MAX_RETRIES) !== null && _a !== void 0 ? _a : 5);
 const STARTUP_RETRY_DELAY_MS = Number((_b = process.env.DB_CONNECT_RETRY_DELAY_MS) !== null && _b !== void 0 ? _b : 5000);
-const REQUEST_RETRIES = Number((_c = process.env.DB_REQUEST_RECONNECT_RETRIES) !== null && _c !== void 0 ? _c : 1);
+const REQUEST_RETRIES = Number((_c = process.env.DB_REQUEST_RECONNECT_RETRIES) !== null && _c !== void 0 ? _c : 2);
 const REQUEST_RETRY_DELAY_MS = Number((_d = process.env.DB_REQUEST_RECONNECT_DELAY_MS) !== null && _d !== void 0 ? _d : 1000);
 const HEALTH_CHECK_INTERVAL_MS = Number((_e = process.env.DB_HEALTH_CHECK_INTERVAL_MS) !== null && _e !== void 0 ? _e : 30000);
 let databaseState = 'idle';

@@ -14,7 +14,7 @@ exports.reconnectPrismaClient = void 0;
 require("dotenv/config");
 const client_1 = require("@prisma/client");
 const databaseErrors_1 = require("../utils/databaseErrors");
-const PRISMA_QUERY_RETRIES = Number((_a = process.env.DB_QUERY_RETRY_COUNT) !== null && _a !== void 0 ? _a : 1);
+const PRISMA_QUERY_RETRIES = Number((_a = process.env.DB_QUERY_RETRY_COUNT) !== null && _a !== void 0 ? _a : 2);
 const PRISMA_QUERY_RETRY_DELAY_MS = Number((_b = process.env.DB_QUERY_RETRY_DELAY_MS) !== null && _b !== void 0 ? _b : 250);
 const globalForPrisma = globalThis;
 const sleep = (ms) => new Promise((resolve) => {

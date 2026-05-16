@@ -18,7 +18,7 @@ type ConnectOptions = {
 
 const STARTUP_RETRIES = Number(process.env.DB_CONNECT_MAX_RETRIES ?? 5);
 const STARTUP_RETRY_DELAY_MS = Number(process.env.DB_CONNECT_RETRY_DELAY_MS ?? 5000);
-const REQUEST_RETRIES = Number(process.env.DB_REQUEST_RECONNECT_RETRIES ?? 1);
+const REQUEST_RETRIES = Number(process.env.DB_REQUEST_RECONNECT_RETRIES ?? 2);
 const REQUEST_RETRY_DELAY_MS = Number(process.env.DB_REQUEST_RECONNECT_DELAY_MS ?? 1000);
 const HEALTH_CHECK_INTERVAL_MS = Number(process.env.DB_HEALTH_CHECK_INTERVAL_MS ?? 30000);
 

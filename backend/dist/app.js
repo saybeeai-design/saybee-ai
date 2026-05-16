@@ -137,8 +137,23 @@ app.get('/api/health', (_req, res) => __awaiter(void 0, void 0, void 0, function
         version: (_a = process.env.npm_package_version) !== null && _a !== void 0 ? _a : '1.0.0',
     });
 }));
+const databaseRequiredApiPrefixes = [
+    '/admin',
+    '/auth',
+    '/coupons',
+    '/interviews',
+    '/payments',
+    '/questions',
+    '/resumes',
+    '/users',
+];
+const requiresDatabaseConnection = (path) => databaseRequiredApiPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 app.use('/api', (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
     if (req.path === '/health') {
+        next();
+        return;
+    }
+    if (!requiresDatabaseConnection(req.path)) {
         next();
         return;
     }

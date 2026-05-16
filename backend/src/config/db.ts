@@ -7,7 +7,7 @@ import {
   isSchemaMismatchDatabaseError,
 } from '../utils/databaseErrors';
 
-const PRISMA_QUERY_RETRIES = Number(process.env.DB_QUERY_RETRY_COUNT ?? 1);
+const PRISMA_QUERY_RETRIES = Number(process.env.DB_QUERY_RETRY_COUNT ?? 2);
 const PRISMA_QUERY_RETRY_DELAY_MS = Number(process.env.DB_QUERY_RETRY_DELAY_MS ?? 250);
 
 const globalForPrisma = globalThis as typeof globalThis & {
