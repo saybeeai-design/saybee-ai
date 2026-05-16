@@ -1,5 +1,3 @@
-import { getApiBaseUrl } from './backendUrl';
-
 export interface ChatStreamMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -46,7 +44,7 @@ export async function streamChatCompletion(
   onToken: (token: string) => void
 ) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const response = await fetch(`${getApiBaseUrl()}/chat/stream`, {
+  const response = await fetch('/api/chat/stream', {
     method: 'POST',
     credentials: 'include',
     headers: {
